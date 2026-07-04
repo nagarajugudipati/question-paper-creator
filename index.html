@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>School Exam Paper Creator</title>
+
+  <!-- Google Fonts for premium UI -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- MathLive for visual equation editing -->
+  <script src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/dist/mathlive.min.js"></script>
+
+  <!-- jsPDF and html2canvas (as fallbacks) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- Modular CSS Stylesheets -->
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/editor.css" />
+  <link rel="stylesheet" href="css/preview.css" />
+  <link rel="stylesheet" href="css/keyboard.css" />
+</head>
+<body>
+
+<!-- ─── Header ─── -->
+<header class="app-header">
+  <h1>
+    📝 MCQ Builder
+    <small>v5.5</small>
+  </h1>
+  <div class="header-actions">
+    <button onclick="window.startTour()" style="background:var(--primary); color:#ffffff; border-color:var(--primary-hover); font-weight:700;">🚀 Take Tour</button>
+    <button onclick="window.toggleOnboardingPanel()" style="background:#047857; color:#ffffff; border-color:#065f46; font-weight:700;">📋 Intern Onboarding</button>
+    <button onclick="window.importJSON()">📂 Import JSON</button>
+    <button onclick="window.exportAllJSON()">💾 Backup All</button>
+    <button onclick="window.clearAllData()" style="color:#f43f5e; border-color: #881337;">🗑️ Clear System Data</button>
+  </div>
+</header>
+
+<!-- ─── Body ─── -->
+<div class="app-body">
+
+  <!-- Left Sidebar (Folder Explorer Tree) -->
+  <aside class="left-sidebar" id="sidebarPanel">
+    <div class="sidebar-header">
+      <div class="sidebar-title-row">
+        <h3>📁 Exam Explorer</h3>
+        <div class="sidebar-actions-btn-group">
+          <button class="btn-new-item" onclick="window.createNewFolder()" style="background:#475569;" title="Create Folder">+ Folder</button>
+          <button class="btn-new-item" onclick="window.createNewPaper()" title="Create Paper">+ Paper</button>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-search">
+      <input type="text" id="paperSearch" placeholder="Search explorer tree..." oninput="window.renderFolderTree()" />
+    </div>
+    <div class="papers-list" id="papersList">
+      <!-- Folder structure rendered dynamically -->
+    </div>
+  </aside>
+
+  <!-- Main Workspaces Container -->
+  <div class="workspace-split">
+
+    <!-- PANEL 1: EDITOR PANE (FULL WIDTH ON EDIT MODE) -->
+    <div class="editor-pane active" id="paneEditor">
+
+      <!-- Editor controls bar -->
+      <div class="global-editor-toolbar">
+        <div class="formatting-buttons" onmousedown="event.preventDefault()">
+          <button class="toolbar-btn" onclick="window.formatText('bold')" title="Bold"><b>B</b></button>
+          <button class="toolbar-btn" onclick="window.formatText('italic')" title="Italic"><i>I</i></button>
+          <button class="toolbar-btn" onclick="window.formatText('underline')" title="Underline"><u>U</u></button>
+          <button class="toolbar-btn" onclick="window.formatText('insertUnorderedList')" title="Bullet List">• List</button>
+          <button class="toolbar-btn" onclick="window.formatText('insertOrderedList')" title="Number List">1. List</button>
+          <button class="toolbar-btn btn-accent btn-insert-eq" onclick="window.insertEquationAtCursor()" title="Insert Equation">➕ Equation</button>
+          <div style="position:relative; display:inline-block;">
+            <button class="toolbar-btn" onmousedown="event.preventDefault()" onclick="window.toggleAdvancedMathDropdown(event)" title="More Options" style="font-weight:700; padding:4px 8px; font-size:12px;">⋮ Options</button>
+            <div id="math-advanced-dropdown" class="math-advanced-dropdown hidden">
+              <!-- categories populated dynamically in mathKeyboard.js -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Standalone Math Sandbox Editor Trigger -->
+        <button class="toolbar-btn btn-accent" onclick="window.openMathSandbox()" title="Open Math Sandbox Editor" style="font-weight:700; background:var(--primary); color:white; border-color:var(--primary-hover);">
+          🧮 Math Sandbox
+        </button>
+
+        <div class="history-controls">
+          <button class="toolbar-btn" id="btnUndo" onclick="window.undo()" title="Undo (Ctrl+Z)">↩️ Undo</button>
+          <button class="toolbar-btn" id="btnRedo" onclick="window.redo()" title="Redo (Ctrl+Y)">↪️ Redo</button>
+        </div>
+        <button class="toolbar-btn btn-success" onclick="window.switchViewMode('preview')" style="font-weight:700;">👁️ Preview Paper</button>
+        <span class="autosave-badge" id="autosaveStatus">Saved</span>
+      </div>
+
+      <!-- Scrollable editing area -->
+      <div class="editor-scroll-area" id="editorArea">
+        <!-- dynamically rendered paper editors -->
+      </div>
+
+    </div>
+
+    <!-- PANEL 2: PREVIEW PANE (FULL WIDTH ON PREVIEW MODE) -->
+    <div class="preview-pane-container" id="panePreview">
+      <!-- Preview control bar -->
+      <div class="preview-toolbar">
+        <div class="preview-toolbar-left">
+          <button class="toolbar-btn" onclick="window.switchViewMode('edit')">← Back to Editor</button>
+          <button class="toolbar-btn btn-accent" onclick="window.print()">🖨️ Print / Save PDF</button>
+        </div>
+        <div class="preview-toolbar-right">
+          <select id="previewCopyMode" onchange="window.renderPrintPreview()">
+            <option value="question">📄 Student Question Paper</option>
+            <option value="answer">🔑 Teacher Answer Key</option>
+          </select>
+          <button class="toolbar-btn" onclick="window.zoomPreview(1)" title="Zoom In">🔍 Zoom In</button>
+          <button class="toolbar-btn" onclick="window.zoomPreview(-1)" title="Zoom Out">🔍 Zoom Out</button>
+          <button class="toolbar-btn" onclick="window.exportDOCX(window.state.activePaperId)">💾 Export DOCX</button>
+          <button class="toolbar-btn" onclick="window.exportJSON(window.state.activePaperId)">💾 Export JSON</button>
+        </div>
+      </div>
+      <!-- preview document sheet viewport -->
+      <div class="preview-scroll-area">
+        <div class="a4-print-sheet" id="printSheet">
+          <!-- dynamically rendered exam sheet -->
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- Move Paper Dialog Modal -->
+<div class="modal-overlay hidden" id="movePaperModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3>📁 Move Paper to Folder</h3>
+      <button class="close-modal" onclick="window.closeMoveModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="movePaperId" />
+      <div class="setting-group">
+        <label>Destination Folder</label>
+        <select id="moveDestFolderId">
+          <!-- options generated -->
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="window.closeMoveModal()">Cancel</button>
+      <button class="btn-primary" onclick="window.applyMovePaper()">Move Paper</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reuse Question Modal -->
+<div class="modal-overlay hidden" id="reuseQuestionModal">
+  <div class="modal-box" style="max-width: 600px;">
+    <div class="modal-header">
+      <h3>🔄 Reuse Questions</h3>
+      <button class="close-modal" onclick="window.closeReuseModal()">✕</button>
+    </div>
+    <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; max-height: 450px; overflow-y: auto;">
+      <div class="setting-group">
+        <label>Select Source Question Paper</label>
+        <select id="reuseSourcePaperId" onchange="window.onReusePaperChanged()">
+          <!-- Loaded dynamically -->
+        </select>
+      </div>
+      <div class="setting-group" style="display: flex; flex-direction: column; gap: 6px;">
+        <label>Select Questions to Import</label>
+        <div id="reuseQuestionsList" style="border: 1px solid var(--border-color); border-radius: 6px; background: #f8fafc; padding: 10px; overflow-y: auto; max-height: 200px; display: flex; flex-direction: column; gap: 8px;">
+          <!-- Checkboxes loaded dynamically -->
+        </div>
+      </div>
+      <div class="setting-group">
+        <label>Destination Section</label>
+        <select id="reuseDestSectionId">
+          <!-- Loaded dynamically -->
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="window.closeReuseModal()">Cancel</button>
+      <button class="btn-primary" onclick="window.applyReuseQuestions()">Import Selected Questions</button>
+    </div>
+  </div>
+</div>
+
+<!-- Onboarding Sidebar Panel -->
+<div class="onboarding-panel" id="onboardingPanel">
+  <div class="onboarding-header">
+    <h3>📋 Onboarding & Milestones</h3>
+    <button class="onboarding-close" onclick="window.toggleOnboardingPanel()">✕</button>
+  </div>
+  <div class="onboarding-body">
+    <div class="onboarding-meta">
+      <div class="onboarding-meta-row">
+        <span>PROGRESS</span>
+        <span id="onboardingCompletionText">0 / 12 (0%)</span>
+      </div>
+      <div class="onboarding-progress-bar-bg">
+        <div class="onboarding-progress-bar-fill" id="onboardingProgressBarFill"></div>
+      </div>
+    </div>
+
+    <div class="onboarding-links">
+      <a href="https://payroll.razorpay.com" target="_blank" class="onboarding-link-btn">💳 Razorpay Payroll</a>
+      <a href="#" onclick="window.markAttendance(); return false;" class="onboarding-link-btn btn-attendance">📅 Mark Attendance</a>
+    </div>
+
+    <div class="onboarding-steps-list" id="onboardingStepsList">
+      <!-- Steps rendered dynamically in onboarding.js -->
+    </div>
+  </div>
+</div>
+
+<!-- Hidden image file selector -->
+<input type="file" id="globalImageInput" accept="image/*" style="display:none;" onchange="window.handleGlobalImageSelect(event)" />
+
+<!-- Toast elements -->
+<div class="toast" id="toast"></div>
+
+<!-- Fixed Bottom Math Calculator Panel -->
+<div id="math-calculator-panel" class="math-calculator-panel hidden">
+  <div class="calculator-wrapper">
+    <button class="calc-btn var-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('x')">x</button>
+    <button class="calc-btn var-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('y')">y</button>
+    <button class="calc-btn var-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('n')">n</button>
+    <button class="calc-btn var-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('a')">a</button>
+
+    <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('\\pi')">π</button>
+    <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('e')">e</button>
+    <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('i')">i</button>
+    <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('<')">&lt;</button>
+    <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('(')">(</button>
+    <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal(')')">)</button>
+
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('7')">7</button>
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('8')">8</button>
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('9')">9</button>
+    <button class="calc-btn op-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('\\div')">÷</button>
+
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('4')">4</button>
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('5')">5</button>
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('6')">6</button>
+    <button class="calc-btn op-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('\\times')">×</button>
+
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('1')">1</button>
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('2')">2</button>
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('3')">3</button>
+    <button class="calc-btn op-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('-')">−</button>
+
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('0')">0</button>
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('.')">.</button>
+    <button class="calc-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('=')">=</button>
+    <button class="calc-btn op-btn" onmousedown="event.preventDefault()" onclick="window.insertCalcVal('+')">+</button>
+  </div>
+</div>
+
+<!-- Math Editor Sandbox Modal (Standalone Equation Builder Overlay) -->
+<div id="math-sandbox-modal" class="modal-overlay hidden">
+  <div class="math-sandbox-content">
+    <div class="sandbox-header">
+      <h3>🧮 Math Editor Sandbox</h3>
+      <button class="close-sandbox-btn" onclick="window.closeMathSandbox()">✕</button>
+    </div>
+
+    <div class="sandbox-body">
+      <div class="sandbox-field-wrapper">
+        <!-- Core Mathfield editor -->
+        <math-field id="sandbox-mathfield" class="sandbox-math-field"></math-field>
+
+        <!-- Advanced drop-down options -->
+        <div style="position:relative; display:inline-block;">
+          <button class="sandbox-options-btn" onmousedown="event.preventDefault()" onclick="window.toggleSandboxDropdown(event)">⋮ Options</button>
+          <div id="sandbox-advanced-dropdown" class="math-advanced-dropdown hidden"></div>
+        </div>
+      </div>
+
+      <!-- Equation/Arithmetic Result previews -->
+      <div class="sandbox-previews">
+        <div class="sandbox-preview-box">
+          <span class="preview-label">LaTeX Code Output</span>
+          <code id="sandbox-latex-output" class="font-mono"></code>
+        </div>
+        <div class="sandbox-preview-box">
+          <span class="preview-label">Arithmetic Value</span>
+          <span id="sandbox-eval-output" class="font-mono text-emerald-600"></span>
+        </div>
+      </div>
+
+      <!-- Calculator Touch Panel -->
+      <div class="sandbox-calculator-grid">
+        <button class="calc-btn var-btn" onmousedown="event.preventDefault()" data-latex="x" onclick="window.insertSandboxSymbol(this)">x</button>
+        <button class="calc-btn var-btn" onmousedown="event.preventDefault()" data-latex="y" onclick="window.insertSandboxSymbol(this)">y</button>
+        <button class="calc-btn var-btn" onmousedown="event.preventDefault()" data-latex="n" onclick="window.insertSandboxSymbol(this)">n</button>
+        <button class="calc-btn var-btn" onmousedown="event.preventDefault()" data-latex="a" onclick="window.insertSandboxSymbol(this)">a</button>
+
+        <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" data-latex="\pi" onclick="window.insertSandboxSymbol(this)">π</button>
+        <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" data-latex="e" onclick="window.insertSandboxSymbol(this)">e</button>
+        <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" data-latex="i" onclick="window.insertSandboxSymbol(this)">i</button>
+        <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" data-latex="<" onclick="window.insertSandboxSymbol(this)">&lt;</button>
+        <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" data-latex="(" onclick="window.insertSandboxSymbol(this)">(</button>
+        <button class="calc-btn fn-btn" onmousedown="event.preventDefault()" data-latex=")" onclick="window.insertSandboxSymbol(this)">)</button>
+
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="7" onclick="window.insertSandboxSymbol(this)">7</button>
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="8" onclick="window.insertSandboxSymbol(this)">8</button>
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="9" onclick="window.insertSandboxSymbol(this)">9</button>
+        <button class="calc-btn op-btn" onmousedown="event.preventDefault()" data-latex="\div" onclick="window.insertSandboxSymbol(this)">÷</button>
+
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="4" onclick="window.insertSandboxSymbol(this)">4</button>
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="5" onclick="window.insertSandboxSymbol(this)">5</button>
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="6" onclick="window.insertSandboxSymbol(this)">6</button>
+        <button class="calc-btn op-btn" onmousedown="event.preventDefault()" data-latex="\times" onclick="window.insertSandboxSymbol(this)">×</button>
+
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="1" onclick="window.insertSandboxSymbol(this)">1</button>
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="2" onclick="window.insertSandboxSymbol(this)">2</button>
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="3" onclick="window.insertSandboxSymbol(this)">3</button>
+        <button class="calc-btn op-btn" onmousedown="event.preventDefault()" data-latex="-" onclick="window.insertSandboxSymbol(this)">−</button>
+
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="0" onclick="window.insertSandboxSymbol(this)">0</button>
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="." onclick="window.insertSandboxSymbol(this)">.</button>
+        <button class="calc-btn" onmousedown="event.preventDefault()" data-latex="=" onclick="window.insertSandboxSymbol(this)">=</button>
+        <button class="calc-btn op-btn" onmousedown="event.preventDefault()" data-latex="+" onclick="window.insertSandboxSymbol(this)">+</button>
+      </div>
+    </div>
+
+    <div class="sandbox-footer">
+      <button class="btn-cancel" onclick="window.closeMathSandbox()">Cancel</button>
+      <button class="btn-insert-math" onclick="window.commitSandboxMath()">Insert Equation</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modular Script Files (Load dependencies sequentially) -->
+<script src="js/app.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/preview.js"></script>
+<script src="js/mathKeyboard.js"></script>
+<script src="js/mathEditor.js"></script>
+<script src="js/fileManager.js"></script>
+<script src="js/export.js"></script>
+<script src="js/autosave.js"></script>
+<script src="js/history.js"></script>
+<script src="js/tour.js"></script>
+<script src="js/onboarding.js"></script>
+<script src="js/reuseQuestion.js"></script>
+</body>
+</html>
