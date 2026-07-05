@@ -52,18 +52,12 @@ window.insertEquationAtCursor = function () {
     mf.value = "";
     mf.setAttribute("value", "");
 
-    mf.addEventListener("input", () => {
-        console.log("Current LaTeX:", mf.value);
-        mf.setAttribute("value", mf.value);
-
-        window.activeEditorElement.dispatchEvent(
-            new Event("input", { bubbles: true })
-        );
-    });
-
     const range = sel.getRangeAt(0);
     range.deleteContents();
     range.insertNode(mf);
+
+    // Initialize mathfield listeners
+    window.initializeMathFields(window.activeEditorElement);
 
     range.setStartAfter(mf);
     range.collapse(true);
@@ -130,8 +124,9 @@ document.addEventListener('focusin', (e) => {
         }
     }
 
-    if (e.target.classList && e.target.classList.contains('contenteditable-editor')) {
-        window.activeEditorElement = e.target;
+    const editor = e.target.closest('.contenteditable-editor');
+    if (editor) {
+        window.activeEditorElement = editor;
     }
 });
 
