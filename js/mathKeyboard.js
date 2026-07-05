@@ -96,6 +96,7 @@ window.insertSearchSymbol = function(latex, unicode) {
                 mf.setAttribute('contenteditable', 'false');
                 mf.classList.add('inline-math');
                 mf.value = latex;
+                mf.setAttribute('value', latex);
                 
                 range.insertNode(mf);
                 
@@ -735,6 +736,7 @@ window.commitSandboxMath = function() {
                 element.setAttribute('contenteditable', 'false');
                 element.classList.add('inline-math');
                 element.value = latex;
+                element.setAttribute('value', latex);
                 
                 range.insertNode(element);
                 window.initializeMathFields(window.activeEditorElement);

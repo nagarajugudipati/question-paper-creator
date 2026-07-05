@@ -50,9 +50,11 @@ window.insertEquationAtCursor = function () {
     const mf = document.createElement("math-field");
     mf.classList.add("inline-math");
     mf.value = "";
+    mf.setAttribute("value", "");
 
     mf.addEventListener("input", () => {
         console.log("Current LaTeX:", mf.value);
+        mf.setAttribute("value", mf.value);
 
         window.activeEditorElement.dispatchEvent(
             new Event("input", { bubbles: true })
@@ -84,6 +86,7 @@ window.initializeMathFields = function(container = document) {
 
             // Forward shadow DOM input changes back to contenteditable wrapper
             mf.addEventListener('input', () => {
+                mf.setAttribute('value', mf.value);
                 const editor = mf.closest('.contenteditable-editor');
                 if (editor) {
                     editor.dispatchEvent(new Event('input', { bubbles: true }));
