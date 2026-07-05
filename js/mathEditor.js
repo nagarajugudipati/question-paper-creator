@@ -3,38 +3,75 @@
 window.activeMathField = null;
 window.activeEditorElement = null;
 
-window.insertEquationAtCursor = function() {
+// window.insertEquationAtCursor = function() {
+//     const sel = window.getSelection();
+//     console.log("selected element", sel);
+//     if (!sel.rangeCount || !window.activeEditorElement) {
+//         window.toast('⚠️ Click inside a question or option text box first');
+//         return;
+//     }
+
+//     const mf = document.createElement('math-field');
+//     mf.setAttribute('contenteditable', 'false');
+//     mf.classList.add('inline-math');
+//     mf.value = 'x';
+
+//     const range = sel.getRangeAt(0);
+//     range.deleteContents();
+//     range.insertNode(mf);
+
+//     // Relocate cursor right after visual element
+//     range.setStartAfter(mf);
+//     range.setEndAfter(mf);
+//     sel.removeAllRanges();
+//     sel.addRange(range);
+
+//     // Initialize mathfield listeners
+//     window.initializeMathFields(window.activeEditorElement);
+
+//     // Bubble input events to save to state
+//     window.activeEditorElement.dispatchEvent(new Event('input', { bubbles: true }));
+
+//     // Focus math-field and display built-in keyboard
+//     setTimeout(() => {
+//         mf.focus();
+//     }, 100);
+// };
+
+
+window.insertEquationAtCursor = function () {
     const sel = window.getSelection();
+
     if (!sel.rangeCount || !window.activeEditorElement) {
         window.toast('⚠️ Click inside a question or option text box first');
         return;
     }
 
-    const mf = document.createElement('math-field');
-    mf.setAttribute('contenteditable', 'false');
-    mf.classList.add('inline-math');
-    mf.value = 'x';
+    const mf = document.createElement("math-field");
+    mf.classList.add("inline-math");
+    mf.value = "";
+
+    mf.addEventListener("input", () => {
+        console.log("Current LaTeX:", mf.value);
+
+        window.activeEditorElement.dispatchEvent(
+            new Event("input", { bubbles: true })
+        );
+    });
 
     const range = sel.getRangeAt(0);
     range.deleteContents();
     range.insertNode(mf);
 
-    // Relocate cursor right after visual element
     range.setStartAfter(mf);
-    range.setEndAfter(mf);
+    range.collapse(true);
     sel.removeAllRanges();
     sel.addRange(range);
 
-    // Initialize mathfield listeners
-    window.initializeMathFields(window.activeEditorElement);
-
-    // Bubble input events to save to state
-    window.activeEditorElement.dispatchEvent(new Event('input', { bubbles: true }));
-
-    // Focus math-field and display built-in keyboard
     setTimeout(() => {
         mf.focus();
-    }, 100);
+        // window.mathVirtualKeyboard.show();
+    }, 0);
 };
 
 window.initializeMathFields = function(container = document) {
