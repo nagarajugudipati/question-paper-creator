@@ -101,41 +101,6 @@ window.exportAllJSON = function() {
     window.toast('💾 Backup downloaded');
 };
 
-window.importJSON = function() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = function(ev) {
-            try {
-                const data = JSON.parse(ev.target.result);
-                if (Array.isArray(data)) {
-                    window.state.papers = data;
-                } else if (data.id && data.sections) {
-                    window.state.papers.push(data);
-                } else {
-                    window.toast('⚠️ Invalid JSON paper layout');
-                    return;
-                }
-                if (window.state.papers.length > 0) {
-                    window.state.activePaperId = window.state.papers[window.state.papers.length - 1].id;
-                }
-                window.saveState();
-                window.render();
-                window.toast('📂 Paper imported');
-            } catch(err) {
-                window.toast('⚠️ Error reading file: ' + err.message);
-            }
-        };
-        reader.readAsText(file);
-    };
-    input.click();
-};
-
 window.clearAllData = function() {
     if (!confirm('⚠️ This deletes ALL papers and folders permanently! Are you sure?')) return;
     window.state.papers = [];

@@ -11,11 +11,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
   <!-- MathLive for visual equation editing -->
-  <script src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/dist/mathlive.min.js"></script>
+  <!-- <script src="https://cdn.jsdelivr.net/npm/mathlive@0.110.0/dist/mathlive.min.js"></script> -->
 
   <!-- jsPDF and html2canvas (as fallbacks) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script type="module">
+    import "https://unpkg.com/mathlive?module";
+  </script>
 
   <!-- Modular CSS Stylesheets -->
   <link rel="stylesheet" href="css/app.css" />
@@ -33,11 +36,29 @@
   </h1>
   <div class="header-actions">
     <button onclick="window.startTour()" style="background:var(--primary); color:#ffffff; border-color:var(--primary-hover); font-weight:700;">🚀 Take Tour</button>
-    <button onclick="window.toggleOnboardingPanel()" style="background:#047857; color:#ffffff; border-color:#065f46; font-weight:700;">📋 Intern Onboarding</button>
-    <button onclick="window.importJSON()">📂 Import JSON</button>
     <button onclick="window.exportAllJSON()">💾 Backup All</button>
     <button onclick="window.clearAllData()" style="color:#f43f5e; border-color: #881337;">🗑️ Clear System Data</button>
   </div>
+  <!-- <h2>MathLive Demo</h2>
+
+  <math-field id="mf">\frac{a}{b}</math-field>
+
+  <button id="btn">Get LaTeX</button>
+
+  <p id="output"></p>
+
+  <script>
+    const mf = document.getElementById("mf");
+    const output = document.getElementById("output");
+
+    mf.addEventListener("input", () => {
+      console.log(mf.value);
+    });
+
+    document.getElementById("btn").addEventListener("click", () => {
+      output.textContent = mf.value;
+    });
+  </script> -->
 </header>
 
 <!-- ─── Body ─── -->
@@ -77,18 +98,12 @@
           <button class="toolbar-btn" onclick="window.formatText('insertUnorderedList')" title="Bullet List">• List</button>
           <button class="toolbar-btn" onclick="window.formatText('insertOrderedList')" title="Number List">1. List</button>
           <button class="toolbar-btn btn-accent btn-insert-eq" onclick="window.insertEquationAtCursor()" title="Insert Equation">➕ Equation</button>
-          <div style="position:relative; display:inline-block;">
-            <button class="toolbar-btn" onmousedown="event.preventDefault()" onclick="window.toggleAdvancedMathDropdown(event)" title="More Options" style="font-weight:700; padding:4px 8px; font-size:12px;">⋮ Options</button>
-            <div id="math-advanced-dropdown" class="math-advanced-dropdown hidden">
-              <!-- categories populated dynamically in mathKeyboard.js -->
-            </div>
-          </div>
         </div>
 
         <!-- Standalone Math Sandbox Editor Trigger -->
-        <button class="toolbar-btn btn-accent" onclick="window.openMathSandbox()" title="Open Math Sandbox Editor" style="font-weight:700; background:var(--primary); color:white; border-color:var(--primary-hover);">
+        <!-- <button class="toolbar-btn btn-accent" onclick="window.openMathSandbox()" title="Open Math Sandbox Editor" style="font-weight:700; background:var(--primary); color:white; border-color:var(--primary-hover);">
           🧮 Math Sandbox
-        </button>
+        </button> -->
 
         <div class="history-controls">
           <button class="toolbar-btn" id="btnUndo" onclick="window.undo()" title="Undo (Ctrl+Z)">↩️ Undo</button>
@@ -189,34 +204,6 @@
     <div class="modal-footer">
       <button class="btn-secondary" onclick="window.closeReuseModal()">Cancel</button>
       <button class="btn-primary" onclick="window.applyReuseQuestions()">Import Selected Questions</button>
-    </div>
-  </div>
-</div>
-
-<!-- Onboarding Sidebar Panel -->
-<div class="onboarding-panel" id="onboardingPanel">
-  <div class="onboarding-header">
-    <h3>📋 Onboarding & Milestones</h3>
-    <button class="onboarding-close" onclick="window.toggleOnboardingPanel()">✕</button>
-  </div>
-  <div class="onboarding-body">
-    <div class="onboarding-meta">
-      <div class="onboarding-meta-row">
-        <span>PROGRESS</span>
-        <span id="onboardingCompletionText">0 / 12 (0%)</span>
-      </div>
-      <div class="onboarding-progress-bar-bg">
-        <div class="onboarding-progress-bar-fill" id="onboardingProgressBarFill"></div>
-      </div>
-    </div>
-
-    <div class="onboarding-links">
-      <a href="https://payroll.razorpay.com" target="_blank" class="onboarding-link-btn">💳 Razorpay Payroll</a>
-      <a href="#" onclick="window.markAttendance(); return false;" class="onboarding-link-btn btn-attendance">📅 Mark Attendance</a>
-    </div>
-
-    <div class="onboarding-steps-list" id="onboardingStepsList">
-      <!-- Steps rendered dynamically in onboarding.js -->
     </div>
   </div>
 </div>
@@ -350,7 +337,6 @@
 <script src="js/autosave.js"></script>
 <script src="js/history.js"></script>
 <script src="js/tour.js"></script>
-<script src="js/onboarding.js"></script>
 <script src="js/reuseQuestion.js"></script>
 </body>
 </html>
