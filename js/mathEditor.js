@@ -115,20 +115,25 @@ window.formatText = function(command) {
 };
 
 // Hook global focus management
-document.addEventListener('focusin', (e) => {
-    if (e.target.tagName === 'MATH-FIELD') {
-        window.activeMathField = e.target;
+const updateActiveElements = (target) => {
+    if (!target) return;
+    if (target.tagName === 'MATH-FIELD') {
+        window.activeMathField = target;
     } else {
-        if (!e.target.closest('.symbol-search-wrapper') && !e.target.closest('.symbol-results-panel')) {
+        if (!target.closest('.symbol-search-wrapper') && !target.closest('.symbol-results-panel')) {
             window.activeMathField = null;
         }
     }
 
-    const editor = e.target.closest('.contenteditable-editor');
+    const editor = target.closest('.contenteditable-editor');
     if (editor) {
         window.activeEditorElement = editor;
     }
-});
+};
+
+document.addEventListener('focusin', (e) => updateActiveElements(e.target));
+document.addEventListener('mousedown', (e) => updateActiveElements(e.target));
+document.addEventListener('contextmenu', (e) => updateActiveElements(e.target));
 
 // Clean browser residual empty tags (like <br>) on blur to restore CSS :empty placeholders
 document.addEventListener('focusout', (e) => {

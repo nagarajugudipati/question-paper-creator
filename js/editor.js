@@ -204,11 +204,11 @@ window.renderTypeSpecificEditors = function(paper, sec, q) {
         q.options.forEach((opt, oIdx) => {
             html += `
                 <div class="option-editor-row" 
-                     draggable="true" 
-                     ondragstart="window.onDragStartOption(event, '${paper.id}', '${sec.id}', '${q.id}', ${oIdx})"
                      ondragover="window.onDragOver(event)"
                      ondrop="window.onDropOption(event, '${q.id}', ${oIdx})">
-                    <span class="opt-drag-handle">⋮⋮</span>
+                    <span class="opt-drag-handle" 
+                          draggable="true" 
+                          ondragstart="window.onDragStartOption(event, '${paper.id}', '${sec.id}', '${q.id}', ${oIdx})">⋮⋮</span>
                     <span class="option-label-indicator">${labels[oIdx]}.</span>
                     
                     <div class="contenteditable-editor" 
