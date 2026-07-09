@@ -3,7 +3,8 @@ window.state = {
     folders: [],
     papers: [],
     activePaperId: null,
-    viewMode: 'edit'
+    viewMode: 'edit',
+    questionBank: []
 };
 
 const STORAGE_KEY = 'school_exam_creator_folder_data_v5.5';
@@ -15,23 +16,47 @@ window.loadState = function() {
             const parsed = JSON.parse(saved);
             window.state.folders = parsed.folders || [];
             window.state.papers = parsed.papers || [];
-            window.state.activePaperId = parsed.activePaperId || null;
+            window.state.activePaperId = parsed.activePaperId !== null && parsed.activePaperId !== undefined ? String(parsed.activePaperId) : null;
+            window.state.questionBank = parsed.questionBank || [];
             
-            // Sync schemas
+            // Sync schemas and normalize old data safely
             window.state.papers.forEach(p => {
-                if (!p.header) p.header = window.createDefaultHeader(p.name);
+                if (p.id !== undefined && p.id !== null) {
+                    p.id = String(p.id);
+                }
+                if (!p.header) {
+                    p.header = window.createDefaultHeader(p.name);
+                }
                 if (!p.folderId) p.folderId = null;
+                if (!p.sections) p.sections = [];
                 p.sections.forEach(s => {
+                    if (!s.questions) s.questions = [];
+                    
+                    // Migrate section marks from question marks sum or marksPerQuestion
+                    if (s.sectionMarks === undefined) {
+                        if (s.marksPerQuestion !== undefined) {
+                            s.sectionMarks = s.marksPerQuestion * s.questions.length;
+                        } else {
+                            // Sum of all existing question marks
+                            const sumOfQuestionMarks = s.questions.reduce((sum, q) => sum + (parseFloat(q.marks) || 0), 0);
+                            s.sectionMarks = sumOfQuestionMarks;
+                        }
+                    }
+                    
                     s.questions.forEach(q => {
                         if (!q.options) q.options = [];
                         if (!q.matches) q.matches = [];
                         if (!q.layout) q.layout = 'row';
                         if (!q.difficulty) q.difficulty = 'Medium';
-                        if (q.marks === undefined) q.marks = 1;
                     });
                 });
+                
+                // Keep paper total max marks in sync
+                const total = p.sections.reduce((sum, s) => sum + (parseFloat(s.sectionMarks) || 0), 0);
+                p.header.maxMarks = String(total);
             });
         } catch(e) {
+            console.error("Failed to load and sync papers state:", e);
             window.state.folders = [];
             window.state.papers = [];
         }
@@ -70,7 +95,8 @@ window.saveState = function() {
     const data = {
         folders: window.state.folders,
         papers: window.state.papers,
-        activePaperId: window.state.activePaperId
+        activePaperId: window.state.activePaperId,
+        questionBank: window.state.questionBank || []
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 };
@@ -78,7 +104,7 @@ window.saveState = function() {
 window.render = function(skipHistory = false) {
     if (window.renderFolderTree) window.renderFolderTree();
     
-    const paper = window.state.papers.find(p => p.id === window.state.activePaperId);
+    const paper = window.state.papers.find(p => String(p.id) === String(window.state.activePaperId));
     
     if (paper && !skipHistory && window.saveHistoryState) {
         window.saveHistoryState();

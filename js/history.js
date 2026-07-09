@@ -4,7 +4,7 @@ window.historyStack = [];
 window.historyIndex = -1;
 
 window.saveHistoryState = function() {
-    const paper = window.state.papers.find(p => p.id === window.state.activePaperId);
+    const paper = window.state.papers.find(p => String(p.id) === String(window.state.activePaperId));
     if (!paper) return;
 
     // Prune redo states if we were in the middle of undoing
@@ -50,7 +50,7 @@ window.restoreHistoryState = function() {
     if (!raw) return;
     const paper = JSON.parse(raw);
 
-    const idx = window.state.papers.findIndex(p => p.id === window.state.activePaperId);
+    const idx = window.state.papers.findIndex(p => String(p.id) === String(window.state.activePaperId));
     if (idx !== -1) {
         window.state.papers[idx] = paper;
     }

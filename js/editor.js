@@ -1,8 +1,48 @@
-// js/editor.js
-
 window.renderEditor = function(paper) {
     const area = document.getElementById('editorArea');
     if (!area) return;
+
+    if (!paper) {
+        area.innerHTML = `
+            <div style="text-align:center;padding:40px;color:var(--text-muted); font-size:13px;">
+                <h3>No active paper</h3>
+                <p style="font-size:13px;margin-top:8px;">Create a folder or paper in the tree on the left to start.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Safety checks / Schema normalization on load
+    if (!paper.header) {
+        paper.header = window.createDefaultHeader ? window.createDefaultHeader(paper.name) : {
+            schoolName: 'Public Examination High School',
+            examName: 'Summative Examination - I 2026',
+            subject: paper.name || 'General Subject',
+            grade: 'Class VIII',
+            timeAllowed: '2 Hours',
+            maxMarks: '50',
+            instructions: [
+                'Answer all the questions.',
+                'Check details block before attempting.',
+                'Right side numbers represent question marks.'
+            ],
+            showStudentDetails: true,
+            showMarks: true
+        };
+    }
+    if (!paper.sections) paper.sections = [];
+    
+    // Normalize nested sections and questions
+    paper.sections.forEach(sec => {
+        if (!sec.questions) sec.questions = [];
+        sec.questions.forEach(q => {
+            if (!q.options) q.options = [];
+            if (!q.matches) q.matches = [];
+            if (q.marks === undefined) q.marks = 1;
+            if (!q.difficulty) q.difficulty = 'Medium';
+            if (!q.type) q.type = 'MCQ';
+        });
+    });
 
     let html = `
         <!-- Title input row -->
@@ -14,7 +54,6 @@ window.renderEditor = function(paper) {
             
             <div class="paper-actions-toolbar">
                 <button class="toolbar-action-btn btn-primary-outline" onclick="window.addSection('${paper.id}')">+ Section</button>
-                <button class="toolbar-action-btn btn-primary-outline" onclick="window.openReuseModal()">🔄 Reuse Q</button>
                 <button class="toolbar-action-btn" onclick="window.exportDOCX('${paper.id}')">📝 DOCX</button>
                 <button class="toolbar-action-btn" onclick="window.switchViewMode('preview')">🖨️ PDF</button>
                 <button class="toolbar-action-btn" onclick="window.exportJSON('${paper.id}')">📂 JSON</button>
@@ -29,6 +68,56 @@ window.renderEditor = function(paper) {
                 <span id="headerCollapseArrow">${window.isHeaderCollapsed ? '▲' : '▼'}</span>
             </div>
             <div class="collapsible-body" id="headerCollapseBody" style="${window.isHeaderCollapsed ? 'display:none;' : 'display:flex;'}">
+                <!-- School Logo settings group -->
+                <div class="setting-group" style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 8px; width: 100%;">
+                    <label style="font-weight: 700; font-size: 12px; color: var(--text-dark); display: block; margin-bottom: 4px;">School Logo</label>
+                    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 6px;">
+                        <div style="display: flex; align-items: center; gap: 14px;">
+                            <div id="logoPreviewContainer" style="width: 80px; height: 80px; border: 1px dashed var(--border-color); border-radius: 6px; display: flex; align-items: center; justify-content: center; background: #f8fafc; overflow: hidden; flex-shrink: 0;">
+                                ${paper.header.logo ? `<img src="${paper.header.logo}" style="width: 100%; height: 100%; object-fit: contain;" />` : `<span style="font-size: 20px; color: var(--text-muted);">🏫</span>`}
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 6px;">
+                                <input type="file" id="logoFileInput" accept="image/png, image/jpeg, image/jpg, image/webp" style="display: none;" onchange="window.handleLogoUpload('${paper.id}', event)" />
+                                <div style="display: flex; gap: 8px;">
+                                    <button class="btn-primary" style="padding: 4px 10px; font-size: 11.5px; border-radius: 4px; cursor: pointer; border: none; font-family: inherit;" onclick="document.getElementById('logoFileInput').click()">
+                                        ${paper.header.logo ? 'Replace Logo' : 'Upload School Logo'}
+                                    </button>
+                                    ${paper.header.logo ? `<button class="btn-danger-outline" style="padding: 4px 10px; font-size: 11.5px; border-radius: 4px; cursor: pointer; font-family: inherit;" onclick="window.removeLogo('${paper.id}')">Remove Logo</button>` : ''}
+                                </div>
+                                <span style="font-size: 10px; color: var(--text-muted);">Supports PNG, JPG, JPEG, WebP.</span>
+                            </div>
+                        </div>
+                        
+                        ${paper.header.logo ? `
+                            <div style="display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--border-color); padding: 8px; border-radius: 6px; background: #f8fafc; font-size: 11px; width: 100%;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <div style="display: flex; align-items: center; gap: 4px;">
+                                        <strong>W:</strong>
+                                        <input type="number" id="logo-ctrl-w" value="${paper.header.logoWidth || 80}" style="width: 55px; padding: 2px 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px;" onchange="window.setLogoWidth('${paper.id}', this.value)" />
+                                        <strong>H:</strong>
+                                        <input type="number" id="logo-ctrl-h" value="${paper.header.logoHeight || 80}" style="width: 55px; padding: 2px 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px;" onchange="window.setLogoHeight('${paper.id}', this.value)" />
+                                        <label style="display: flex; align-items: center; gap: 2px; cursor: pointer; user-select: none; font-weight: bold;">
+                                            <input type="checkbox" id="logo-ctrl-lock" ${paper.header.logoLockAspect !== false ? 'checked' : ''} onchange="window.setLogoLockAspect('${paper.id}', this.checked)" /> Lock
+                                        </label>
+                                    </div>
+                                    <div style="width: 1px; height: 14px; background: #cbd5e1;"></div>
+                                    <div style="display: flex; gap: 4px;">
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px; ${paper.header.logoAlignment === 'left' || !paper.header.logoAlignment ? 'background: var(--primary-color); color:#fff;' : ''}" onclick="window.setLogoAlign('${paper.id}', 'left')">Left</button>
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px; ${paper.header.logoAlignment === 'center' ? 'background: var(--primary-color); color:#fff;' : ''}" onclick="window.setLogoAlign('${paper.id}', 'center')">Center</button>
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px; ${paper.header.logoAlignment === 'right' ? 'background: var(--primary-color); color:#fff;' : ''}" onclick="window.setLogoAlign('${paper.id}', 'right')">Right</button>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
+                                    <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="window.setLogoSizePreset('${paper.id}', 60)">Small</button>
+                                    <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="window.setLogoSizePreset('${paper.id}', 100)">Medium</button>
+                                    <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="window.setLogoSizePreset('${paper.id}', 150)">Large</button>
+                                    <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="window.setLogoReset('${paper.id}')">Reset Size</button>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
                 <div class="setting-group">
                     <label>School / College Name</label>
                     <input type="text" id="cfgSchoolName" value="${window.escHtml(paper.header.schoolName)}" oninput="window.updateHeaderField('schoolName', this.value)" />
@@ -80,7 +169,7 @@ window.renderEditor = function(paper) {
     if (paper.sections.length === 0) {
         html += `
             <div style="text-align:center;padding:30px;border:1.5px dashed var(--border-color);border-radius:8px;color:var(--text-muted);font-size:13px;margin-top:16px;">
-                No sections. Click "+ Add Section" below to create paper segments.
+                No sections yet. Click + Add Section to start creating your question paper.
             </div>
         `;
     } else {
@@ -94,6 +183,12 @@ window.renderEditor = function(paper) {
                                class="section-title-input"
                                onchange="window.renameSection('${paper.id}', '${sec.id}', this.value)" 
                                placeholder="Section A - Mathematics" />
+                        
+                        <div class="section-marks-control" style="display: flex; align-items: center; gap: 4px; margin-left: 12px; margin-right: 12px;">
+                            <span style="font-size: 11.5px; font-weight: 700; color: var(--text-muted); white-space: nowrap;">Section Marks:</span>
+                            <input type="number" value="${sec.sectionMarks !== undefined ? sec.sectionMarks : 0}" style="width: 45px; padding: 2px 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; font-weight: 600;" onchange="window.setSectionMarks('${paper.id}', '${sec.id}', this.value)" min="0" />
+                        </div>
+                        
                         <span class="section-question-count">(${sec.questions.length} Q)</span>
                         <div class="section-actions">
                             <button class="section-add-q-btn" onclick="window.addQuestion('${paper.id}', '${sec.id}')">+ Question</button>
@@ -159,12 +254,11 @@ window.renderEditorQuestionCard = function(paper, sec, q, qIdx) {
                 <div class="q-meta-inputs">
                     <span class="q-drag-handle" draggable="true" ondragstart="window.onDragStartQuestion(event, '${paper.id}', '${sec.id}', '${q.id}', ${qIdx})">⋮⋮</span>
                     ${typeDropdown}
-                    <input type="number" value="${q.marks}" style="width:45px;" onchange="window.setQuestionMarks('${paper.id}', '${sec.id}', '${q.id}', this.value)" min="0" />
-                    <span style="font-size:11px;font-weight:700;color:var(--text-muted);">Marks</span>
                     ${diffDropdown}
                 </div>
                 <div class="editor-q-actions">
-                    <button class="icon-action-btn" onclick="window.duplicateQuestion('${paper.id}', '${sec.id}', '${q.id}')" title="Duplicate Question">📋</button>
+                    <button class="section-add-q-btn" onclick="window.addQuestion('${paper.id}', '${sec.id}', '${q.id}')">+ Add Question</button>
+                    <button class="icon-action-btn" onclick="window.saveQuestionForReuse('${paper.id}', '${sec.id}', '${q.id}')" title="Save for Reuse">💾</button>
                     <button class="icon-action-btn btn-danger-hover" onclick="window.deleteQuestion('${paper.id}', '${sec.id}', '${q.id}')" title="Remove Question">✕</button>
                 </div>
             </div>
@@ -179,11 +273,54 @@ window.renderEditorQuestionCard = function(paper, sec, q, qIdx) {
                     </button>
 
                     ${q.image ? `
-                        <div class="q-image-editor-section">
-                            <div class="q-image-preview-block">
-                                <img src="${q.image}" />
-                                <button onclick="window.removeQuestionImage('${paper.id}', '${sec.id}', '${q.id}')">✕</button>
+                        <div class="q-image-editor-section" style="text-align: ${q.imageAlignment || 'left'}; margin: 10px 0;">
+                            <div class="q-image-resizable-box" style="position: relative; display: inline-block; width: ${q.imageWidth ? q.imageWidth + 'px' : 'auto'}; height: ${q.imageHeight ? q.imageHeight + 'px' : 'auto'}; max-width: 100%; border: 1px solid ${window.selectedImageId === q.id ? 'var(--primary-color)' : 'transparent'}; border-radius: 4px; padding: 2px;" id="img-box-${q.id}">
+                                <img src="${q.image}" style="max-width: 100%; max-height: 400px; display: block; width: 100%; height: 100%; object-fit: contain; cursor: pointer;" id="img-el-${q.id}" onclick="window.selectQuestionImage('${paper.id}', '${sec.id}', '${q.id}')" />
+                                
+                                <!-- Resize Handles (Only show when selected) -->
+                                ${window.selectedImageId === q.id ? `
+                                    <div class="resize-handle top-left" onmousedown="window.startImageResize(event, '${paper.id}', '${sec.id}', '${q.id}', 'top-left')" style="position: absolute; width: 8px; height: 8px; background: var(--primary-color); border: 1px solid #fff; top: -4px; left: -4px; cursor: nwse-resize; z-index: 10;"></div>
+                                    <div class="resize-handle top-right" onmousedown="window.startImageResize(event, '${paper.id}', '${sec.id}', '${q.id}', 'top-right')" style="position: absolute; width: 8px; height: 8px; background: var(--primary-color); border: 1px solid #fff; top: -4px; right: -4px; cursor: nesw-resize; z-index: 10;"></div>
+                                    <div class="resize-handle bottom-left" onmousedown="window.startImageResize(event, '${paper.id}', '${sec.id}', '${q.id}', 'bottom-left')" style="position: absolute; width: 8px; height: 8px; background: var(--primary-color); border: 1px solid #fff; bottom: -4px; left: -4px; cursor: nesw-resize; z-index: 10;"></div>
+                                    <div class="resize-handle bottom-right" onmousedown="window.startImageResize(event, '${paper.id}', '${sec.id}', '${q.id}', 'bottom-right')" style="position: absolute; width: 8px; height: 8px; background: var(--primary-color); border: 1px solid #fff; bottom: -4px; right: -4px; cursor: nwse-resize; z-index: 10;"></div>
+                                    
+                                    <!-- Tooltip showing size -->
+                                    <div id="img-size-badge-${q.id}" style="position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-bottom: 4px; white-space: nowrap; z-index: 10;">
+                                        ${q.imageWidth || 'Auto'} x ${q.imageHeight || 'Auto'} px
+                                    </div>
+                                ` : ''}
                             </div>
+                            
+                            <!-- Control Toolbar -->
+                            ${window.selectedImageId === q.id ? `
+                                <div class="q-image-controls-bar" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; padding: 6px; border: 1px solid var(--border-color); border-radius: 6px; background: #f8fafc; font-size: 11px; width: fit-content; max-width: 100%;">
+                                    <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                                        <strong>W:</strong>
+                                        <input type="number" id="img-ctrl-w-${q.id}" value="${q.imageWidth || ''}" placeholder="Auto" style="width: 55px; padding: 2px 4px; font-size: 11px; border: 1px solid var(--border-color); border-radius: 4px;" onchange="window.setQuestionImageWidth('${paper.id}', '${sec.id}', '${q.id}', this.value)" />
+                                        <strong>H:</strong>
+                                        <input type="number" id="img-ctrl-h-${q.id}" value="${q.imageHeight || ''}" placeholder="Auto" style="width: 55px; padding: 2px 4px; font-size: 11px; border: 1px solid var(--border-color); border-radius: 4px;" onchange="window.setQuestionImageHeight('${paper.id}', '${sec.id}', '${q.id}', this.value)" />
+                                        <label style="display: flex; align-items: center; gap: 2px; cursor: pointer; user-select: none; font-weight: bold;">
+                                            <input type="checkbox" id="img-ctrl-lock-${q.id}" ${q.imageLockAspect !== false ? 'checked' : ''} onchange="window.setQuestionImageLockAspect('${paper.id}', '${sec.id}', '${q.id}', this.checked)" /> Lock
+                                        </label>
+                                    </div>
+                                    <div style="width: 1px; height: 14px; background: #cbd5e1;"></div>
+                                    <div style="display: flex; gap: 4px;">
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px; ${q.imageAlignment === 'left' || !q.imageAlignment ? 'background: var(--primary-color); color:#fff;' : ''}" onclick="window.setQuestionImageAlign('${paper.id}', '${sec.id}', '${q.id}', 'left')">Left</button>
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px; ${q.imageAlignment === 'center' ? 'background: var(--primary-color); color:#fff;' : ''}" onclick="window.setQuestionImageAlign('${paper.id}', '${sec.id}', '${q.id}', 'center')">Center</button>
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px; ${q.imageAlignment === 'right' ? 'background: var(--primary-color); color:#fff;' : ''}" onclick="window.setQuestionImageAlign('${paper.id}', '${sec.id}', '${q.id}', 'right')">Right</button>
+                                    </div>
+                                    <div style="width: 1px; height: 14px; background: #cbd5e1;"></div>
+                                    <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="window.setQuestionImageSizePreset('${paper.id}', '${sec.id}', '${q.id}', 150)">Small</button>
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="window.setQuestionImageSizePreset('${paper.id}', '${sec.id}', '${q.id}', 300)">Medium</button>
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="window.setQuestionImageSizePreset('${paper.id}', '${sec.id}', '${q.id}', 500)">Large</button>
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="window.setQuestionImageSizePreset('${paper.id}', '${sec.id}', '${q.id}', 'fit')">Fit</button>
+                                        <button class="btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="window.setQuestionImageReset('${paper.id}', '${sec.id}', '${q.id}')">Reset</button>
+                                    </div>
+                                    <div style="width: 1px; height: 14px; background: #cbd5e1;"></div>
+                                    <button class="btn-danger-outline" style="padding: 2px 6px; font-size: 10px;" onclick="window.removeQuestionImage('${paper.id}', '${sec.id}', '${q.id}')">Remove</button>
+                                </div>
+                            ` : ''}
                         </div>
                     ` : ''}
 
@@ -342,9 +479,15 @@ window.addSection = function(paperId) {
     const sec = {
         id: 'sec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
         name: 'Section ' + String.fromCharCode(65 + paper.sections.length) + ': New Section',
-        questions: []
+        questions: [],
+        sectionMarks: 10
     };
     paper.sections.push(sec);
+    
+    // Recalculate Maximum Marks
+    const total = paper.sections.reduce((sum, s) => sum + (parseFloat(s.sectionMarks) || 0), 0);
+    paper.header.maxMarks = String(total);
+    
     window.render();
     window.toast('📂 Created section');
 };
@@ -364,12 +507,34 @@ window.deleteSection = function(paperId, secId) {
     const paper = window.state.papers.find(p => p.id === paperId);
     if (!paper) return;
     paper.sections = paper.sections.filter(s => s.id !== secId);
+    
+    // Recalculate Maximum Marks
+    const total = paper.sections.reduce((sum, s) => sum + (parseFloat(s.sectionMarks) || 0), 0);
+    paper.header.maxMarks = String(total);
+    
     window.render();
     window.toast('🗑️ Section deleted');
 };
 
+window.setSectionMarks = function(paperId, secId, val) {
+    const paper = window.state.papers.find(p => String(p.id) === String(paperId));
+    if (!paper) return;
+    const sec = paper.sections.find(s => s.id === secId);
+    if (sec) {
+        const numericVal = parseFloat(val);
+        sec.sectionMarks = isNaN(numericVal) ? 0 : numericVal;
+        
+        // Recalculate Maximum Marks
+        const total = paper.sections.reduce((sum, s) => sum + (parseFloat(s.sectionMarks) || 0), 0);
+        paper.header.maxMarks = String(total);
+        
+        window.triggerAutosave();
+        window.render(true);
+    }
+};
+
 // ─── Questions mutations ───
-window.addQuestion = function(paperId, secId) {
+window.addQuestion = function(paperId, secId, insertAfterQuestionId = null) {
     const paper = window.state.papers.find(p => p.id === paperId);
     if (!paper) return;
     const sec = paper.sections.find(s => s.id === secId);
@@ -379,7 +544,6 @@ window.addQuestion = function(paperId, secId) {
         id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
         type: 'MCQ',
         text: '',
-        marks: 1,
         difficulty: 'Medium',
         layout: 'row',
         options: [
@@ -389,7 +553,18 @@ window.addQuestion = function(paperId, secId) {
             { id: 'opt_' + Date.now() + '_3', text: '', isCorrect: false }
         ]
     };
-    sec.questions.push(q);
+
+    if (insertAfterQuestionId) {
+        const idx = sec.questions.findIndex(item => item.id === insertAfterQuestionId);
+        if (idx !== -1) {
+            sec.questions.splice(idx + 1, 0, q);
+        } else {
+            sec.questions.push(q);
+        }
+    } else {
+        sec.questions.push(q);
+    }
+    
     window.render();
     
     setTimeout(() => {
@@ -475,17 +650,6 @@ window.setQuestionType = function(paperId, secId, qId, type) {
     window.render();
 };
 
-window.setQuestionMarks = function(paperId, secId, qId, marks) {
-    const paper = window.state.papers.find(p => p.id === paperId);
-    if (!paper) return;
-    const sec = paper.sections.find(s => s.id === secId);
-    if (!sec) return;
-    const q = sec.questions.find(q => q.id === qId);
-    if (q) {
-        q.marks = parseFloat(marks) || 0;
-        window.triggerAutosave();
-    }
-};
 
 window.setQuestionDifficulty = function(paperId, secId, qId, diff) {
     const paper = window.state.papers.find(p => p.id === paperId);
@@ -643,15 +807,24 @@ window.handleGlobalImageSelect = function(e) {
         const base64 = ev.target.result;
         const { paperId, secId, qId } = activeImageTarget;
 
-        const paper = window.state.papers.find(p => p.id === paperId);
-        if (!paper) return;
-        const sec = paper.sections.find(s => s.id === secId);
-        if (!sec) return;
-        const q = sec.questions.find(q => q.id === qId);
-        if (q) {
-            q.image = base64;
-            window.render();
-        }
+        const imgObj = new Image();
+        imgObj.onload = function() {
+            const paper = window.state.papers.find(p => p.id === paperId);
+            if (!paper) return;
+            const sec = paper.sections.find(s => s.id === secId);
+            if (!sec) return;
+            const q = sec.questions.find(q => q.id === qId);
+            if (q) {
+                q.image = base64;
+                q.imageWidth = imgObj.width || 300;
+                q.imageHeight = imgObj.height || 200;
+                q.imageAlignment = 'left';
+                q.imageLockAspect = true;
+                window.saveState();
+                window.render();
+            }
+        };
+        imgObj.src = base64;
     };
     reader.readAsDataURL(file);
 };
@@ -777,18 +950,27 @@ document.addEventListener('paste', (e) => {
                         const secId = qCard.dataset.secId;
                         const paperId = window.state.activePaperId;
                         
-                        const paper = window.state.papers.find(p => p.id === paperId);
-                        if (paper) {
-                            const sec = paper.sections.find(s => s.id === secId);
-                            if (sec) {
-                                const q = sec.questions.find(q => q.id === qId);
-                                if (q) {
-                                    q.image = base64;
-                                    window.render();
-                                    window.toast('📷 Diagram pasted from clipboard!');
+                        const imgObj = new Image();
+                        imgObj.onload = function() {
+                            const paper = window.state.papers.find(p => p.id === paperId);
+                            if (paper) {
+                                const sec = paper.sections.find(s => s.id === secId);
+                                if (sec) {
+                                    const q = sec.questions.find(q => q.id === qId);
+                                    if (q) {
+                                        q.image = base64;
+                                        q.imageWidth = imgObj.width || 300;
+                                        q.imageHeight = imgObj.height || 200;
+                                        q.imageAlignment = 'left';
+                                        q.imageLockAspect = true;
+                                        window.saveState();
+                                        window.render();
+                                        window.toast('📷 Diagram pasted from clipboard!');
+                                    }
                                 }
                             }
-                        }
+                        };
+                        imgObj.src = base64;
                     }
                 };
                 reader.readAsDataURL(blob);
@@ -797,3 +979,477 @@ document.addEventListener('paste', (e) => {
         }
     }
 });
+
+window.handleLogoUpload = function(paperId, event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const supportedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!supportedTypes.includes(file.type)) {
+        window.toast("⚠️ Error: Unsupported file format. Please upload PNG, JPG, JPEG, or WebP.");
+        event.target.value = '';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const base64Data = e.target.result;
+        const imgObj = new Image();
+        imgObj.onload = function() {
+            const paper = window.state.papers.find(p => p.id === paperId);
+            if (paper) {
+                if (!paper.header) paper.header = {};
+                paper.header.logo = base64Data;
+                paper.header.logoWidth = imgObj.width || 80;
+                paper.header.logoHeight = imgObj.height || 80;
+                paper.header.logoAlignment = paper.header.logoAlignment || 'left';
+                paper.header.logoLockAspect = true;
+                window.saveState();
+                window.render();
+                if (window.renderPrintPreview) window.renderPrintPreview();
+                window.toast("🏫 School logo uploaded successfully!");
+            }
+        };
+        imgObj.src = base64Data;
+    };
+    reader.onerror = function() {
+        window.toast("⚠️ Error: Failed to read image file.");
+    };
+    reader.readAsDataURL(file);
+};
+
+window.removeLogo = function(paperId) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    if (paper) {
+        if (paper.header) {
+            delete paper.header.logo;
+            delete paper.header.logoWidth;
+            delete paper.header.logoHeight;
+            delete paper.header.logoAlignment;
+        }
+        window.saveState();
+        window.render();
+        if (window.renderPrintPreview) window.renderPrintPreview();
+        window.toast("🗑️ School logo removed.");
+    }
+};
+
+// ─── Image Resizing and Alignment Helpers ───
+window.selectedImageId = null;
+window.activeResizeState = null;
+
+window.selectQuestionImage = function(paperId, secId, qId) {
+    if (window.selectedImageId !== qId) {
+        window.selectedImageId = qId;
+        // Deselect logo if selected
+        window.logoSelected = false;
+        window.render();
+        if (window.renderPrintPreview) window.renderPrintPreview();
+    }
+};
+
+// Handle deselection on click outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.q-image-resizable-box') && !e.target.closest('.q-image-controls-bar')) {
+        if (window.selectedImageId !== null) {
+            window.selectedImageId = null;
+            window.render();
+        }
+    }
+});
+
+window.startImageResize = function(e, paperId, secId, qId, handleName) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const box = document.getElementById(`img-box-${qId}`);
+    if (!box) return;
+
+    const startWidth = box.offsetWidth;
+    const startHeight = box.offsetHeight;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const aspectRatio = startWidth / startHeight;
+
+    const paper = window.state.papers.find(p => p.id === paperId);
+    if (!paper) return;
+    const sec = paper.sections.find(s => s.id === secId);
+    if (!sec) return;
+    const q = sec.questions.find(q => q.id === qId);
+    if (!q) return;
+
+    const onMouseMove = (moveEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        const deltaY = moveEvent.clientY - startY;
+
+        let newWidth = startWidth;
+        let newHeight = startHeight;
+
+        if (handleName === 'bottom-right') {
+            newWidth = startWidth + deltaX;
+            newHeight = startHeight + deltaY;
+        } else if (handleName === 'bottom-left') {
+            newWidth = startWidth - deltaX;
+            newHeight = startHeight + deltaY;
+        } else if (handleName === 'top-right') {
+            newWidth = startWidth + deltaX;
+            newHeight = startHeight - deltaY;
+        } else if (handleName === 'top-left') {
+            newWidth = startWidth - deltaX;
+            newHeight = startHeight - deltaY;
+        }
+
+        const lockAspect = q.imageLockAspect !== false;
+        if (lockAspect) {
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                newHeight = newWidth / aspectRatio;
+            } else {
+                newWidth = newHeight * aspectRatio;
+            }
+        }
+
+        if (newWidth < 40) newWidth = 40;
+        if (newHeight < 40) newHeight = 40;
+
+        const maxWidth = 650;
+        if (newWidth > maxWidth) {
+            newWidth = maxWidth;
+            if (lockAspect) {
+                newHeight = newWidth / aspectRatio;
+            }
+        }
+
+        newWidth = Math.round(newWidth);
+        newHeight = Math.round(newHeight);
+
+        box.style.width = newWidth + 'px';
+        box.style.height = newHeight + 'px';
+
+        const tooltip = document.getElementById(`img-size-badge-${qId}`);
+        if (tooltip) {
+            tooltip.textContent = `${newWidth} x ${newHeight} px`;
+        }
+
+        const inputW = document.getElementById(`img-ctrl-w-${qId}`);
+        const inputH = document.getElementById(`img-ctrl-h-${qId}`);
+        if (inputW) inputW.value = newWidth;
+        if (inputH) inputH.value = newHeight;
+
+        window.activeResizeState = { width: newWidth, height: newHeight };
+    };
+
+    const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        if (window.activeResizeState) {
+            q.imageWidth = window.activeResizeState.width;
+            q.imageHeight = window.activeResizeState.height;
+            window.activeResizeState = null;
+            window.saveState();
+            if (window.renderPrintPreview) window.renderPrintPreview();
+        }
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+};
+
+window.setQuestionImageWidth = function(paperId, secId, qId, val) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    const sec = paper ? paper.sections.find(s => s.id === secId) : null;
+    const q = sec ? sec.questions.find(q => q.id === qId) : null;
+    if (!q) return;
+
+    const w = parseInt(val);
+    if (!isNaN(w) && w > 0) {
+        if (q.imageLockAspect !== false && q.imageWidth && q.imageHeight) {
+            const aspect = q.imageWidth / q.imageHeight;
+            q.imageHeight = Math.round(w / aspect);
+        }
+        q.imageWidth = w;
+        window.saveState();
+        window.render();
+        if (window.renderPrintPreview) window.renderPrintPreview();
+    }
+};
+
+window.setQuestionImageHeight = function(paperId, secId, qId, val) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    const sec = paper ? paper.sections.find(s => s.id === secId) : null;
+    const q = sec ? sec.questions.find(q => q.id === qId) : null;
+    if (!q) return;
+
+    const h = parseInt(val);
+    if (!isNaN(h) && h > 0) {
+        if (q.imageLockAspect !== false && q.imageWidth && q.imageHeight) {
+            const aspect = q.imageWidth / q.imageHeight;
+            q.imageWidth = Math.round(h * aspect);
+        }
+        q.imageHeight = h;
+        window.saveState();
+        window.render();
+        if (window.renderPrintPreview) window.renderPrintPreview();
+    }
+};
+
+window.setQuestionImageLockAspect = function(paperId, secId, qId, val) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    const sec = paper ? paper.sections.find(s => s.id === secId) : null;
+    const q = sec ? sec.questions.find(q => q.id === qId) : null;
+    if (!q) return;
+
+    q.imageLockAspect = val;
+    window.saveState();
+};
+
+window.setQuestionImageAlign = function(paperId, secId, qId, align) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    const sec = paper ? paper.sections.find(s => s.id === secId) : null;
+    const q = sec ? sec.questions.find(q => q.id === qId) : null;
+    if (!q) return;
+
+    q.imageAlignment = align;
+    window.saveState();
+    window.render();
+    if (window.renderPrintPreview) window.renderPrintPreview();
+};
+
+window.setQuestionImageSizePreset = function(paperId, secId, qId, size) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    const sec = paper ? paper.sections.find(s => s.id === secId) : null;
+    const q = sec ? sec.questions.find(q => q.id === qId) : null;
+    if (!q) return;
+
+    const img = document.getElementById(`img-el-${qId}`);
+    const originalAspect = img ? (img.naturalWidth / img.naturalHeight || 1.33) : 1.33;
+
+    if (size === 'fit') {
+        q.imageWidth = 650;
+        q.imageHeight = Math.round(650 / originalAspect);
+    } else {
+        q.imageWidth = size;
+        q.imageHeight = Math.round(size / originalAspect);
+    }
+
+    window.saveState();
+    window.render();
+    if (window.renderPrintPreview) window.renderPrintPreview();
+};
+
+window.setQuestionImageReset = function(paperId, secId, qId) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    const sec = paper ? paper.sections.find(s => s.id === secId) : null;
+    const q = sec ? sec.questions.find(q => q.id === qId) : null;
+    if (!q) return;
+
+    const img = document.getElementById(`img-el-${qId}`);
+    if (img) {
+        q.imageWidth = img.naturalWidth || 300;
+        q.imageHeight = img.naturalHeight || 200;
+        window.saveState();
+        window.render();
+        if (window.renderPrintPreview) window.renderPrintPreview();
+    }
+};
+
+// ─── School Logo Resizing and Alignment Helpers ───
+window.logoSelected = false;
+window.activeLogoResizeState = null;
+
+window.selectLogo = function(e) {
+    if (e) {
+        e.stopPropagation();
+    }
+    if (!window.logoSelected) {
+        window.logoSelected = true;
+        // Deselect question image if selected
+        window.selectedImageId = null;
+        window.render();
+        if (window.renderPrintPreview) window.renderPrintPreview();
+    }
+};
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#logo-box') && !e.target.closest('#logo-ctrl-w') && !e.target.closest('#logo-ctrl-h') && !e.target.closest('#logo-ctrl-lock')) {
+        if (window.logoSelected) {
+            window.logoSelected = false;
+            window.renderPrintPreview();
+        }
+    }
+});
+
+window.startLogoResize = function(e, paperId, handleName) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const box = document.getElementById('logo-box');
+    if (!box) return;
+
+    const startWidth = box.offsetWidth;
+    const startHeight = box.offsetHeight;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const aspectRatio = startWidth / startHeight;
+
+    const paper = window.state.papers.find(p => p.id === paperId);
+    if (!paper) return;
+
+    const onMouseMove = (moveEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        const deltaY = moveEvent.clientY - startY;
+
+        let newWidth = startWidth;
+        let newHeight = startHeight;
+
+        if (handleName === 'bottom-right') {
+            newWidth = startWidth + deltaX;
+            newHeight = startHeight + deltaY;
+        } else if (handleName === 'bottom-left') {
+            newWidth = startWidth - deltaX;
+            newHeight = startHeight + deltaY;
+        } else if (handleName === 'top-right') {
+            newWidth = startWidth + deltaX;
+            newHeight = startHeight - deltaY;
+        } else if (handleName === 'top-left') {
+            newWidth = startWidth - deltaX;
+            newHeight = startHeight - deltaY;
+        }
+
+        const lockAspect = paper.header.logoLockAspect !== false;
+        if (lockAspect) {
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                newHeight = newWidth / aspectRatio;
+            } else {
+                newWidth = newHeight * aspectRatio;
+            }
+        }
+
+        if (newWidth < 20) newWidth = 20;
+        if (newHeight < 20) newHeight = 20;
+
+        const maxWidth = 200;
+        if (newWidth > maxWidth) {
+            newWidth = maxWidth;
+            if (lockAspect) {
+                newHeight = newWidth / aspectRatio;
+            }
+        }
+
+        newWidth = Math.round(newWidth);
+        newHeight = Math.round(newHeight);
+
+        box.style.width = newWidth + 'px';
+        box.style.height = newHeight + 'px';
+
+        const tooltip = document.getElementById('logo-size-badge');
+        if (tooltip) {
+            tooltip.textContent = `${newWidth} x ${newHeight} px`;
+        }
+
+        const inputW = document.getElementById('logo-ctrl-w');
+        const inputH = document.getElementById('logo-ctrl-h');
+        if (inputW) inputW.value = newWidth;
+        if (inputH) inputH.value = newHeight;
+
+        window.activeLogoResizeState = { width: newWidth, height: newHeight };
+    };
+
+    const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        if (window.activeLogoResizeState) {
+            paper.header.logoWidth = window.activeLogoResizeState.width;
+            paper.header.logoHeight = window.activeLogoResizeState.height;
+            window.activeLogoResizeState = null;
+            window.saveState();
+            window.render();
+            if (window.renderPrintPreview) window.renderPrintPreview();
+        }
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+};
+
+window.setLogoWidth = function(paperId, val) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    if (!paper) return;
+
+    const w = parseInt(val);
+    if (!isNaN(w) && w > 0) {
+        if (paper.header.logoLockAspect !== false && paper.header.logoWidth && paper.header.logoHeight) {
+            const aspect = paper.header.logoWidth / paper.header.logoHeight;
+            paper.header.logoHeight = Math.round(w / aspect);
+        }
+        paper.header.logoWidth = w;
+        window.saveState();
+        window.render();
+        if (window.renderPrintPreview) window.renderPrintPreview();
+    }
+};
+
+window.setLogoHeight = function(paperId, val) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    if (!paper) return;
+
+    const h = parseInt(val);
+    if (!isNaN(h) && h > 0) {
+        if (paper.header.logoLockAspect !== false && paper.header.logoWidth && paper.header.logoHeight) {
+            const aspect = paper.header.logoWidth / paper.header.logoHeight;
+            paper.header.logoWidth = Math.round(h * aspect);
+        }
+        paper.header.logoHeight = h;
+        window.saveState();
+        window.render();
+        if (window.renderPrintPreview) window.renderPrintPreview();
+    }
+};
+
+window.setLogoLockAspect = function(paperId, val) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    if (!paper) return;
+
+    paper.header.logoLockAspect = val;
+    window.saveState();
+};
+
+window.setLogoAlign = function(paperId, align) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    if (!paper) return;
+
+    paper.header.logoAlignment = align;
+    window.saveState();
+    window.render();
+    if (window.renderPrintPreview) window.renderPrintPreview();
+};
+
+window.setLogoSizePreset = function(paperId, size) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    if (!paper) return;
+
+    const img = document.getElementById('logo-el');
+    const aspect = img ? (img.naturalWidth / img.naturalHeight || 1.0) : 1.0;
+
+    paper.header.logoWidth = size;
+    paper.header.logoHeight = Math.round(size / aspect);
+
+    window.saveState();
+    window.render();
+    if (window.renderPrintPreview) window.renderPrintPreview();
+};
+
+window.setLogoReset = function(paperId) {
+    const paper = window.state.papers.find(p => p.id === paperId);
+    if (!paper) return;
+
+    const img = document.getElementById('logo-el');
+    if (img) {
+        paper.header.logoWidth = img.naturalWidth || 80;
+        paper.header.logoHeight = img.naturalHeight || 80;
+        window.saveState();
+        window.render();
+        if (window.renderPrintPreview) window.renderPrintPreview();
+    }
+};

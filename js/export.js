@@ -16,67 +16,58 @@ window.exportCSV = function(paperId) {
     const paper = window.state.papers.find(p => p.id === paperId);
     if (!paper) { window.toast('⚠️ Paper not found'); return; }
     
-    const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
-    let rows = [['Section', 'Question Type', 'Question Text', 'Marks', 'Options / Matches / Explanations', 'Correct Answer']];
+    let rows = [['Question No.', 'Correct Answer']];
+    let absoluteIndex = 1;
+    
+    function escapeCSV(field) {
+        if (field === null || field === undefined) return '';
+        const stringValue = String(field);
+        if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n') || stringValue.includes('\r')) {
+            return `"${stringValue.replace(/"/g, '""')}"`;
+        }
+        return stringValue;
+    }
     
     paper.sections.forEach(sec => {
         sec.questions.forEach(q => {
-            const qText = q.text.replace(/<[^>]*>/g, '').replace(/,/g, ';').replace(/\n/g, ' ').trim();
+            let correctAns = '';
             
-            if (q.type === 'MCQ' || q.type === 'True/False') {
-                let optsText = [];
-                let correctOpt = '';
-                q.options.forEach((o, oi) => {
-                    const cleanOpt = o.text.replace(/<[^>]*>/g, '').replace(/,/g, ';').replace(/\n/g, ' ').trim();
-                    const label = labels[oi] || `O${oi + 1}`;
-                    optsText.push(`${label}. ${cleanOpt}`);
-                    if (o.isCorrect) correctOpt = label;
-                });
-                rows.push([
-                    sec.name.replace(/,/g, ';'),
-                    q.type,
-                    qText,
-                    q.marks,
-                    optsText.join(' | '),
-                    correctOpt
-                ]);
+            if (q.type === 'MCQ') {
+                const correctOptIdx = q.options.findIndex(o => o.isCorrect);
+                if (correctOptIdx !== -1) {
+                    correctAns = String.fromCharCode(65 + correctOptIdx); // 'A', 'B', 'C', 'D'...
+                }
+            } else if (q.type === 'True/False') {
+                const correctOpt = q.options.find(o => o.isCorrect);
+                if (correctOpt) {
+                    correctAns = correctOpt.text; // 'True' or 'False'
+                }
             } else if (q.type === 'Match') {
-                let matchesText = [];
-                q.matches.forEach((m, mi) => {
-                    const cleanL = m.left.replace(/<[^>]*>/g, '').replace(/,/g, ';').replace(/\n/g, ' ').trim();
-                    const cleanR = m.right.replace(/<[^>]*>/g, '').replace(/,/g, ';').replace(/\n/g, ' ').trim();
-                    matchesText.push(`${mi + 1}. ${cleanL} = ${cleanR}`);
-                });
-                rows.push([
-                    sec.name.replace(/,/g, ';'),
-                    q.type,
-                    qText,
-                    q.marks,
-                    matchesText.join(' | '),
-                    'See Matches'
-                ]);
+                if (q.matches && q.matches.length > 0) {
+                    correctAns = q.matches.map(m => `${m.left} = ${m.right}`).join('; ');
+                }
             } else {
-                const explanation = (q.explanation || '').replace(/,/g, ';').replace(/\n/g, ' ').trim();
-                rows.push([
-                    sec.name.replace(/,/g, ';'),
-                    q.type,
-                    qText,
-                    q.marks,
-                    'Explanation / Key',
-                    explanation
-                ]);
+                correctAns = q.explanation || '';
             }
+            
+            rows.push([
+                String(absoluteIndex),
+                correctAns.trim()
+            ]);
+            absoluteIndex++;
         });
     });
     
-    let csvContent = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    let csvContent = rows.map(r => r.map(escapeCSV).join(',')).join('\r\n');
+    
+    // Add UTF-8 BOM so Excel opens it correctly
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `${paper.name.replace(/\s+/g, '_')}_questions.csv`;
+    link.download = `${paper.name.replace(/\s+/g, '_')}_answer_key.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
-    window.toast('💾 Downloaded CSV question sheet');
+    window.toast('💾 Downloaded CSV Answer Key');
 };
 
 window.exportAllJSON = function() {
@@ -208,6 +199,7 @@ window.parseHtmlToRuns = async function(node, parentStyles = { bold: false, ital
             
             // Skip block elements that are handled separately in the layout
             if (child.classList.contains('paper-q-img') || 
+                child.classList.contains('paper-q-img-wrapper') || 
                 child.classList.contains('paper-options-grid') || 
                 child.classList.contains('paper-match-grid') ||
                 child.classList.contains('paper-opt') ||
@@ -309,7 +301,7 @@ window.exportDOCX = async function(paperId) {
     
     // Safely resolve enums with default fallbacks
     const AlignmentType = docxLib.AlignmentType || { CENTER: "center", RIGHT: "right", LEFT: "left" };
-    const WidthType = docxLib.WidthType || { PERCENTAGE: "pct" };
+    const WidthType = docxLib.WidthType || { PERCENTAGE: "pct", DXA: "dxa", AUTO: "auto" };
     const BorderStyle = docxLib.BorderStyle || { SINGLE: "single", NONE: "none" };
     const ShadingType = docxLib.ShadingType || { CLEAR: "clear" };
     const TextAlignment = docxLib.TextAlignment || { CENTER: "center", BASELINE: "baseline", TOP: "top" };
@@ -343,30 +335,172 @@ window.exportDOCX = async function(paperId) {
                 const schoolName = el.querySelector('.paper-school-name')?.textContent?.trim() || '';
                 const examName = el.querySelector('.paper-exam-name')?.textContent?.trim() || '';
                 
-                docxElements.push(new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    spacing: { before: 200, after: 60 },
-                    children: [
-                        new TextRun({
-                            text: schoolName,
-                            bold: true,
-                            size: 32,
-                            font: "Times New Roman"
-                        })
-                    ]
-                }));
-                docxElements.push(new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    spacing: { before: 60, after: 200 },
-                    children: [
-                        new TextRun({
-                            text: examName,
-                            bold: true,
-                            size: 24,
-                            font: "Times New Roman"
-                        })
-                    ]
-                }));
+                if (paper.header.logo) {
+                    const logoBase64 = paper.header.logo.split(',')[1];
+                    let logoW = paper.header.logoWidth ? parseInt(paper.header.logoWidth) : 80;
+                    let logoH = paper.header.logoHeight ? parseInt(paper.header.logoHeight) : 80;
+                    const logoAlign = paper.header.logoAlignment || 'left';
+                    
+                    // Measure natural aspect ratio to mimic object-fit: contain
+                    const imgObj = new Image();
+                    imgObj.src = paper.header.logo;
+                    await new Promise(resolve => {
+                        imgObj.onload = resolve;
+                        imgObj.onerror = resolve;
+                    });
+                    
+                    if (imgObj.naturalWidth && imgObj.naturalHeight) {
+                        const aspect = imgObj.naturalWidth / imgObj.naturalHeight;
+                        const boxAspect = logoW / logoH;
+                        if (aspect > boxAspect) {
+                            logoH = Math.round(logoW / aspect);
+                        } else {
+                            logoW = Math.round(logoH * aspect);
+                        }
+                    }
+                    
+                    if (logoAlign === 'center') {
+                        docxElements.push(new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            spacing: { before: 120, after: 120 },
+                            children: [
+                                new ImageRun({
+                                    data: logoBase64,
+                                    transformation: {
+                                        width: logoW,
+                                        height: logoH
+                                    }
+                                })
+                            ]
+                        }));
+                        docxElements.push(new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            spacing: { before: 60, after: 60 },
+                            children: [
+                                new TextRun({
+                                    text: schoolName,
+                                    bold: true,
+                                    size: 32,
+                                    font: "Times New Roman"
+                                })
+                            ]
+                        }));
+                        docxElements.push(new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            spacing: { before: 60, after: 120 },
+                            children: [
+                                new TextRun({
+                                    text: examName,
+                                    bold: true,
+                                    size: 24,
+                                    font: "Times New Roman"
+                                })
+                            ]
+                        }));
+                    } else {
+                        // Twips conversion (1px/pt = 20 twips)
+                        const logoDxa = logoW * 20;
+                        const totalWidthDxa = 9000;
+                        const textDxa = totalWidthDxa - (logoDxa * 2);
+                        
+                        const logoCell = new TableCell({
+                            width: { size: logoDxa, type: WidthType.DXA },
+                            children: [
+                                new Paragraph({
+                                    alignment: logoAlign === 'left' ? AlignmentType.LEFT : AlignmentType.RIGHT,
+                                    children: [
+                                        new ImageRun({
+                                            data: logoBase64,
+                                            transformation: {
+                                                width: logoW,
+                                                height: logoH
+                                            }
+                                        })
+                                    ]
+                                })
+                            ]
+                        });
+                        
+                        const textCell = new TableCell({
+                            width: { size: textDxa, type: WidthType.DXA },
+                            children: [
+                                new Paragraph({
+                                    alignment: AlignmentType.CENTER,
+                                    spacing: { before: 60, after: 40 },
+                                    children: [
+                                        new TextRun({
+                                            text: schoolName,
+                                            bold: true,
+                                            size: 32,
+                                            font: "Times New Roman"
+                                        })
+                                    ]
+                                }),
+                                new Paragraph({
+                                    alignment: AlignmentType.CENTER,
+                                    spacing: { before: 40, after: 60 },
+                                    children: [
+                                        new TextRun({
+                                            text: examName,
+                                            bold: true,
+                                            size: 24,
+                                            font: "Times New Roman"
+                                        })
+                                    ]
+                                })
+                            ]
+                        });
+                        
+                        const spacerCell = new TableCell({
+                            width: { size: logoDxa, type: WidthType.DXA },
+                            children: [
+                                new Paragraph({ children: [] })
+                            ]
+                        });
+                        
+                        const rowChildren = logoAlign === 'left' 
+                            ? [logoCell, textCell, spacerCell]
+                            : [spacerCell, textCell, logoCell];
+                            
+                        const headerTable = new Table({
+                            width: { size: totalWidthDxa, type: WidthType.DXA },
+                            alignment: TableAlignment.LEFT,
+                            borders: TableBorders.NONE,
+                            rows: [
+                                new TableRow({
+                                    children: rowChildren
+                                })
+                            ]
+                        });
+                        docxElements.push(headerTable);
+                        docxElements.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+                    }
+                } else {
+                    docxElements.push(new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 200, after: 60 },
+                        children: [
+                            new TextRun({
+                                text: schoolName,
+                                bold: true,
+                                size: 32,
+                                font: "Times New Roman"
+                            })
+                        ]
+                    }));
+                    docxElements.push(new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 60, after: 200 },
+                        children: [
+                            new TextRun({
+                                text: examName,
+                                bold: true,
+                                size: 24,
+                                font: "Times New Roman"
+                            })
+                        ]
+                    }));
+                }
                 
             } else if (el.classList.contains('paper-meta-grid')) {
                 const divs = Array.from(el.querySelectorAll('div'));
@@ -490,21 +624,70 @@ window.exportDOCX = async function(paperId) {
                 docxElements.push(new Paragraph({ spacing: { before: 120, after: 120 }, children: [] }));
                 
             } else if (el.classList.contains('paper-section-title')) {
-                docxElements.push(new Paragraph({
-                    spacing: { before: 240, after: 120 },
-                    children: [
-                        new TextRun({
-                            text: el.textContent.trim(),
-                            bold: true,
-                            size: 26,
-                            font: "Times New Roman"
+                const secNameSpan = el.querySelector('span');
+                const secMarksSpan = el.querySelector('.paper-section-marks-badge');
+                
+                const secNameText = secNameSpan ? secNameSpan.textContent.trim() : el.textContent.trim();
+                const secMarksText = secMarksSpan ? secMarksSpan.textContent.trim() : '';
+                
+                const secTable = new Table({
+                    width: { size: 100, type: WidthType.PERCENTAGE },
+                    alignment: TableAlignment.LEFT,
+                    borders: TableBorders.NONE,
+                    rows: [
+                        new TableRow({
+                            children: [
+                                new TableCell({
+                                    width: { size: 70, type: WidthType.PERCENTAGE },
+                                    children: [
+                                        new Paragraph({
+                                            spacing: { before: 240, after: 120 },
+                                            children: [
+                                                new TextRun({
+                                                    text: secNameText,
+                                                    bold: true,
+                                                    size: 26,
+                                                    font: "Times New Roman"
+                                                })
+                                            ]
+                                        })
+                                    ]
+                                }),
+                                new TableCell({
+                                    width: { size: 30, type: WidthType.PERCENTAGE },
+                                    children: [
+                                        new Paragraph({
+                                            alignment: AlignmentType.RIGHT,
+                                            spacing: { before: 240, after: 120 },
+                                            children: [
+                                                new TextRun({
+                                                    text: secMarksText,
+                                                    bold: true,
+                                                    size: 26,
+                                                    font: "Times New Roman"
+                                                })
+                                            ]
+                                        })
+                                    ]
+                                })
+                            ]
                         })
                     ]
-                }));
+                });
+                docxElements.push(secTable);
                 
             } else if (el.classList.contains('paper-q-row')) {
                 const qBody = el.querySelector('.paper-q-body');
                 const qMarks = el.querySelector('.paper-q-marks');
+                
+                const qId = el.getAttribute('data-q-id');
+                let q = null;
+                if (qId) {
+                    for (const sec of paper.sections) {
+                        const found = sec.questions.find(item => item.id === qId);
+                        if (found) { q = found; break; }
+                    }
+                }
                 
                 if (qBody) {
                     const mainQRuns = await window.parseHtmlToRuns(qBody);
@@ -522,13 +705,13 @@ window.exportDOCX = async function(paperId) {
                         if (src && src.startsWith('data:image')) {
                             const base64 = src.split(',')[1];
                             
-                            // Try to parse dimensions
-                            const widthAttr = origBlockImg.getAttribute('width') || origBlockImg.style.width || '250';
-                            const heightAttr = origBlockImg.getAttribute('height') || origBlockImg.style.height || '140';
-                            const wVal = parseInt(widthAttr) || 250;
-                            const hVal = parseInt(heightAttr) || 140;
+                            let wVal = q && q.imageWidth ? parseInt(q.imageWidth) : 250;
+                            let hVal = q && q.imageHeight ? parseInt(q.imageHeight) : 140;
+                            const alignVal = q && q.imageAlignment ? q.imageAlignment.toUpperCase() : 'LEFT';
+                            const alignType = AlignmentType[alignVal] || AlignmentType.LEFT;
                             
                             bodyCellChildren.push(new Paragraph({
+                                alignment: alignType,
                                 spacing: { before: 120, after: 120 },
                                 children: [
                                     new ImageRun({
@@ -735,6 +918,7 @@ window.exportDOCX = async function(paperId) {
                     }
                     
                     const marksCellChildren = [];
+                    let hasIndividualMarks = false;
                     if (qMarks && qMarks.textContent.trim()) {
                         marksCellChildren.push(new Paragraph({
                             alignment: AlignmentType.RIGHT,
@@ -748,30 +932,35 @@ window.exportDOCX = async function(paperId) {
                                 })
                             ]
                         }));
+                        hasIndividualMarks = true;
                     } else {
                         marksCellChildren.push(new Paragraph({ children: [] }));
                     }
                     
-                    const qTable = new Table({
-                        width: { size: 100, type: WidthType.PERCENTAGE },
-                        alignment: TableAlignment.LEFT,
-                        borders: TableBorders.NONE,
-                        rows: [
-                            new TableRow({
-                                children: [
-                                    new TableCell({
-                                        width: { size: 90, type: WidthType.PERCENTAGE },
-                                        children: bodyCellChildren
-                                    }),
-                                    new TableCell({
-                                        width: { size: 10, type: WidthType.PERCENTAGE },
-                                        children: marksCellChildren
-                                    })
-                                ]
-                            })
-                        ]
-                    });
-                    docxElements.push(qTable);
+                    if (hasIndividualMarks) {
+                        const qTable = new Table({
+                            width: { size: 100, type: WidthType.PERCENTAGE },
+                            alignment: TableAlignment.LEFT,
+                            borders: TableBorders.NONE,
+                            rows: [
+                                new TableRow({
+                                    children: [
+                                        new TableCell({
+                                            width: { size: 90, type: WidthType.PERCENTAGE },
+                                            children: bodyCellChildren
+                                        }),
+                                        new TableCell({
+                                            width: { size: 10, type: WidthType.PERCENTAGE },
+                                            children: marksCellChildren
+                                        })
+                                    ]
+                                })
+                            ]
+                        });
+                        docxElements.push(qTable);
+                    } else {
+                        bodyCellChildren.forEach(child => docxElements.push(child));
+                    }
                     docxElements.push(new Paragraph({ spacing: { before: 100, after: 100 }, children: [] }));
                 }
                 
@@ -1114,8 +1303,9 @@ window.buildExportHTML = function(paper) {
                 html += `</table>`;
             }
 
-            const showQMarks = (paper.header.showMarks !== false) && (parseFloat(q.marks) > 0);
-            const marksHTML = showQMarks ? `<div class="ex-q-marks">[${q.marks}]</div>` : '';
+            const qMarks = sec.marksPerQuestion !== undefined ? sec.marksPerQuestion : (q.marks !== undefined ? q.marks : 1);
+            const showQMarks = (paper.header.showMarks !== false) && (parseFloat(qMarks) > 0);
+            const marksHTML = showQMarks ? `<div class="ex-q-marks">[${qMarks}]</div>` : '';
 
             html += `
                     </div>

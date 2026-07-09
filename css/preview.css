@@ -255,4 +255,18 @@
         zoom: 1 !important;
         transform: none !important;
     }
+    .logo-resize-handle,
+    .logo-resize-handle-border,
+    #logo-size-badge,
+    .resize-handle,
+    [id^="img-size-badge-"],
+    .q-image-controls-bar {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    .logo-preview-wrapper,
+    .q-image-resizable-box {
+        border: none !important;
+        padding: 0 !important;
+    }
 }

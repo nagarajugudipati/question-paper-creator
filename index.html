@@ -107,12 +107,16 @@
         <!-- <button class="toolbar-btn btn-accent" onclick="window.openMathSandbox()" title="Open Math Sandbox Editor" style="font-weight:700; background:var(--primary); color:white; border-color:var(--primary-hover);">
           🧮 Math Sandbox
         </button> -->
+        
 
         <div class="history-controls">
           <button class="toolbar-btn" id="btnUndo" onclick="window.undo()" title="Undo (Ctrl+Z)">↩️ Undo</button>
           <button class="toolbar-btn" id="btnRedo" onclick="window.redo()" title="Redo (Ctrl+Y)">↪️ Redo</button>
         </div>
-        <button class="toolbar-btn btn-success" onclick="window.switchViewMode('preview')" style="font-weight:700;">👁️ Preview Paper</button>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="toolbar-btn" onclick="window.openReuseModal()" style="font-weight:700;">🔄 Question Bank</button>
+          <button class="toolbar-btn btn-success" onclick="window.switchViewMode('preview')" style="font-weight:700;">👁️ Preview Paper</button>
+        </div>
         <span class="autosave-badge" id="autosaveStatus">Saved</span>
       </div>
 
@@ -179,34 +183,69 @@
 
 <!-- Reuse Question Modal -->
 <div class="modal-overlay hidden" id="reuseQuestionModal">
-  <div class="modal-box" style="max-width: 600px;">
+  <div class="modal-box" style="max-width: 750px; width: 95%;">
     <div class="modal-header">
-      <h3>🔄 Reuse Questions</h3>
+      <h3>🔄 Question Bank & Reuse</h3>
       <button class="close-modal" onclick="window.closeReuseModal()">✕</button>
     </div>
-    <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; max-height: 450px; overflow-y: auto;">
-      <div class="setting-group">
-        <label>Select Source Question Paper</label>
-        <select id="reuseSourcePaperId" onchange="window.onReusePaperChanged()">
-          <!-- Loaded dynamically -->
-        </select>
+    <div class="modal-body" style="display: flex; flex-direction: column; gap: 12px; max-height: 480px; overflow-y: auto; padding: 16px;">
+      <!-- Tab Headers -->
+      <div class="modal-tabs" style="display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 4px;">
+        <button id="reuseTabBank" class="modal-tab-btn active" onclick="window.switchReuseTab('bank')" style="padding: 8px 16px; border: none; background: none; border-bottom: 2px solid var(--primary-color); font-weight: bold; cursor: pointer; font-family: inherit; font-size: 13px;">📋 Question Bank</button>
+        <button id="reuseTabPapers" class="modal-tab-btn" onclick="window.switchReuseTab('papers')" style="padding: 8px 16px; border: none; background: none; border-bottom: 2px solid transparent; font-weight: normal; cursor: pointer; color: var(--text-muted); font-family: inherit; font-size: 13px;">📄 From Other Papers</button>
       </div>
-      <div class="setting-group" style="display: flex; flex-direction: column; gap: 6px;">
-        <label>Select Questions to Import</label>
-        <div id="reuseQuestionsList" style="border: 1px solid var(--border-color); border-radius: 6px; background: #f8fafc; padding: 10px; overflow-y: auto; max-height: 200px; display: flex; flex-direction: column; gap: 8px;">
-          <!-- Checkboxes loaded dynamically -->
+
+      <!-- Tab Content: Question Bank -->
+      <div id="reuseContentBank" style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="bankSearchInput" placeholder="Search saved questions by text..." oninput="window.renderBankQuestions()" style="flex-grow: 1; padding: 6px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-family: inherit; font-size: 13px;" />
+          <select id="bankTypeFilter" onchange="window.renderBankQuestions()" style="padding: 6px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-family: inherit; font-size: 13px;">
+            <option value="">All Types</option>
+            <option value="MCQ">MCQ</option>
+            <option value="True/False">True/False</option>
+            <option value="Fill in the Blank">Fill in the Blank</option>
+            <option value="Match">Match</option>
+            <option value="Short Answer">Short Answer</option>
+            <option value="Long Answer">Long Answer</option>
+          </select>
+        </div>
+        <div style="display: flex; gap: 14px; height: 320px;">
+          <!-- Left: List of saved questions -->
+          <div id="bankQuestionsList" style="width: 45%; border: 1px solid var(--border-color); border-radius: 6px; background: #f8fafc; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+            <!-- Questions list loaded dynamically -->
+          </div>
+          <!-- Right: Full Preview & Import controls -->
+          <div id="bankQuestionPreviewContainer" style="width: 55%; border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; background: #fff;">
+            <!-- Question preview loaded dynamically -->
+          </div>
         </div>
       </div>
-      <div class="setting-group">
-        <label>Destination Section</label>
-        <select id="reuseDestSectionId">
-          <!-- Loaded dynamically -->
-        </select>
+
+      <!-- Tab Content: From Other Papers (Legacy) -->
+      <div id="reuseContentPapers" style="display: none; flex-direction: column; gap: 10px;">
+        <div class="setting-group" style="margin-bottom: 10px;">
+          <label style="font-weight: 600; font-size: 12px; color: var(--text-dark); display: block; margin-bottom: 4px;">Select Source Question Paper</label>
+          <select id="reuseSourcePaperId" onchange="window.onReusePaperChanged()" style="width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: 6px;">
+            <!-- Loaded dynamically -->
+          </select>
+        </div>
+        <div class="setting-group" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px;">
+          <label style="font-weight: 600; font-size: 12px; color: var(--text-dark); display: block; margin-bottom: 4px;">Select Questions to Import</label>
+          <div id="reuseQuestionsList" style="border: 1px solid var(--border-color); border-radius: 6px; background: #f8fafc; padding: 10px; overflow-y: auto; max-height: 200px; display: flex; flex-direction: column; gap: 8px;">
+            <!-- Checkboxes loaded dynamically -->
+          </div>
+        </div>
+        <div class="setting-group" style="margin-bottom: 10px;">
+          <label style="font-weight: 600; font-size: 12px; color: var(--text-dark); display: block; margin-bottom: 4px;">Destination Section</label>
+          <select id="reuseDestSectionId" style="width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: 6px;">
+            <!-- Loaded dynamically -->
+          </select>
+        </div>
+        <div class="modal-footer" style="padding: 10px 0 0 0; border-top: none; display: flex; justify-content: flex-end; gap: 8px;">
+          <button class="btn-secondary" onclick="window.closeReuseModal()">Cancel</button>
+          <button class="btn-primary" onclick="window.applyReuseQuestions()">Import Selected Questions</button>
+        </div>
       </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn-secondary" onclick="window.closeReuseModal()">Cancel</button>
-      <button class="btn-primary" onclick="window.applyReuseQuestions()">Import Selected Questions</button>
     </div>
   </div>
 </div>

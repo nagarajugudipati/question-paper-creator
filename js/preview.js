@@ -1,8 +1,17 @@
 // js/preview.js
 
 window.renderPrintPreview = function() {
-    const paper = window.state.papers.find(p => p.id === window.state.activePaperId);
+    const paper = window.state.papers.find(p => String(p.id) === String(window.state.activePaperId));
     if (!paper) return;
+
+    // Safety checks / Schema normalization
+    if (!paper.header) {
+        paper.header = window.createDefaultHeader ? window.createDefaultHeader(paper.name) : {};
+    }
+    if (!paper.sections) paper.sections = [];
+    paper.sections.forEach(sec => {
+        if (!sec.questions) sec.questions = [];
+    });
 
     const mode = document.getElementById('previewCopyMode').value; // 'question' | 'answer'
     const sheet = document.getElementById('printSheet');
@@ -11,10 +20,79 @@ window.renderPrintPreview = function() {
     const h = paper.header;
 
     // Build School Exam Header block
+    const logoAlign = h.logoAlignment || 'left';
+    const logoW = h.logoWidth || 80;
+    const logoH = h.logoHeight || 80;
+
+    let logoHtml = '';
+    if (h.logo) {
+        logoHtml = `
+            <div class="logo-preview-wrapper" style="position: relative; display: inline-block; width: ${logoW}px; height: ${logoH}px; max-width: 100%; border: 1px solid transparent; flex-shrink: 0;" id="logo-box">
+                <img src="${h.logo}" style="width: 100%; height: 100%; object-fit: contain; display: block; cursor: pointer;" id="logo-el" onclick="window.selectLogo(event)" />
+                
+                <!-- Logo Resize Handles (only when selected) -->
+                ${window.logoSelected ? `
+                    <div class="logo-resize-handle-border" style="position: absolute; inset: 0; border: 2px solid var(--primary-color); pointer-events: none;"></div>
+                    <div class="logo-resize-handle top-left" onmousedown="window.startLogoResize(event, '${paper.id}', 'top-left')" style="position: absolute; width: 8px; height: 8px; background: var(--primary-color); border: 1px solid #fff; top: -4px; left: -4px; cursor: nwse-resize; z-index: 10;"></div>
+                    <div class="logo-resize-handle top-right" onmousedown="window.startLogoResize(event, '${paper.id}', 'top-right')" style="position: absolute; width: 8px; height: 8px; background: var(--primary-color); border: 1px solid #fff; top: -4px; right: -4px; cursor: nesw-resize; z-index: 10;"></div>
+                    <div class="logo-resize-handle bottom-left" onmousedown="window.startLogoResize(event, '${paper.id}', 'bottom-left')" style="position: absolute; width: 8px; height: 8px; background: var(--primary-color); border: 1px solid #fff; bottom: -4px; left: -4px; cursor: nesw-resize; z-index: 10;"></div>
+                    <div class="logo-resize-handle bottom-right" onmousedown="window.startLogoResize(event, '${paper.id}', 'bottom-right')" style="position: absolute; width: 8px; height: 8px; background: var(--primary-color); border: 1px solid #fff; bottom: -4px; right: -4px; cursor: nwse-resize; z-index: 10;"></div>
+                    
+                    <div id="logo-size-badge" style="position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-bottom: 4px; white-space: nowrap; z-index: 10;">
+                        ${logoW} x ${logoH} px
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    let headerContentHtml = '';
+    if (h.logo) {
+        if (logoAlign === 'left') {
+            headerContentHtml = `
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;">
+                    ${logoHtml}
+                    <div style="flex-grow: 1; text-align: center;">
+                        <div class="paper-school-name" style="font-size: 20px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">${window.escHtml(h.schoolName)}</div>
+                        <div class="paper-exam-name" style="font-size: 15px; font-weight: bold; margin-bottom: 12px;">${window.escHtml(h.examName)}</div>
+                    </div>
+                    <div class="logo-spacer" style="width: ${logoW}px; flex-shrink: 0;"></div>
+                </div>
+            `;
+        } else if (logoAlign === 'right') {
+            headerContentHtml = `
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;">
+                    <div class="logo-spacer" style="width: ${logoW}px; flex-shrink: 0;"></div>
+                    <div style="flex-grow: 1; text-align: center;">
+                        <div class="paper-school-name" style="font-size: 20px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">${window.escHtml(h.schoolName)}</div>
+                        <div class="paper-exam-name" style="font-size: 15px; font-weight: bold; margin-bottom: 12px;">${window.escHtml(h.examName)}</div>
+                    </div>
+                    ${logoHtml}
+                </div>
+            `;
+        } else { // Center
+            headerContentHtml = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 100%; text-align: center;">
+                    ${logoHtml}
+                    <div>
+                        <div class="paper-school-name" style="font-size: 20px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">${window.escHtml(h.schoolName)}</div>
+                        <div class="paper-exam-name" style="font-size: 15px; font-weight: bold; margin-bottom: 12px;">${window.escHtml(h.examName)}</div>
+                    </div>
+                </div>
+            `;
+        }
+    } else {
+        headerContentHtml = `
+            <div style="text-align: center; width: 100%;">
+                <div class="paper-school-name" style="font-size: 20px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">${window.escHtml(h.schoolName)}</div>
+                <div class="paper-exam-name" style="font-size: 15px; font-weight: bold; margin-bottom: 12px;">${window.escHtml(h.examName)}</div>
+            </div>
+        `;
+    }
+
     let html = `
-        <div class="paper-header-block">
-            <div class="paper-school-name">${window.escHtml(h.schoolName)}</div>
-            <div class="paper-exam-name">${window.escHtml(h.examName)}</div>
+        <div class="paper-header-block" data-logo-align="${logoAlign}" data-logo-w="${logoW}" data-logo-h="${logoH}" style="margin-bottom: 20px;">
+            ${headerContentHtml}
         </div>
 
         <div class="paper-meta-grid">
@@ -54,18 +132,30 @@ window.renderPrintPreview = function() {
 
     paper.sections.forEach(sec => {
         if (sec.questions.length === 0) return;
-        html += `<div class="paper-section-title">${window.escHtml(sec.name)}</div>`;
+        html += `
+            <div class="paper-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>${window.escHtml(sec.name)}</span>
+                <span class="paper-section-marks-badge" style="font-weight: bold; font-size: 13px;">[${sec.sectionMarks || 0} Marks]</span>
+            </div>
+        `;
 
         sec.questions.forEach(q => {
             html += `
-                <div class="paper-q-row">
+                <div class="paper-q-row" data-q-id="${q.id}">
                     <div class="paper-q-body">
                         <strong>Q${absoluteQIndex}.</strong> ${q.text || '(empty question text)'}
             `;
 
             // Diagram image
             if (q.image) {
-                html += `<img src="${q.image}" class="paper-q-img" />`;
+                const align = q.imageAlignment || 'left';
+                const w = q.imageWidth ? `${q.imageWidth}px` : 'auto';
+                const h = q.imageHeight ? `${q.imageHeight}px` : 'auto';
+                html += `
+                    <div class="paper-q-img-wrapper" style="text-align: ${align}; margin: 8px 0; max-width: 100%;">
+                        <img src="${q.image}" class="paper-q-img" style="width: ${w}; height: ${h}; max-width: 100%; object-fit: contain;" />
+                    </div>
+                `;
             }
 
             // Options block (using CSS grid and flex for perfect alignments)
@@ -141,8 +231,7 @@ window.renderPrintPreview = function() {
                 answerMatrix.push({ num: absoluteQIndex, ans: 'Rubric / Short Answer' });
             }
 
-            const showQMarks = (paper.header.showMarks !== false) && (parseFloat(q.marks) > 0);
-            const marksHTML = showQMarks ? `<div class="paper-q-marks">[${q.marks}]</div>` : '';
+            const marksHTML = '';
 
             html += `
                     </div>
